@@ -48,6 +48,13 @@
           </div>
         </div>
         <div class="stat-card">
+          <span class="material-symbols-outlined stat-icon">event_busy</span>
+          <div>
+            <strong id="statSinCita">0</strong>
+            <span>Sin cita</span>
+          </div>
+        </div>
+        <div class="stat-card">
           <span class="material-symbols-outlined stat-icon">receipt_long</span>
           <div>
             <strong id="statFacturas">0</strong>
@@ -82,11 +89,23 @@
               <option value="Femenino">Femenino</option>
             </select>
           </label>
+          <label>Cédula / Documento
+            <input type="text" id="pacienteCedula" placeholder="Cédula de identidad" />
+          </label>
+          <label>Seguro / Aseguradora
+            <input type="text" id="pacienteSeguro" placeholder="Ej: MAPFRE, Seguro Público" />
+          </label>
           <label>Teléfono
             <input type="tel" id="pacienteTelefono" placeholder="Teléfono" />
           </label>
           <label>Correo
             <input type="email" id="pacienteEmail" placeholder="Correo (opcional)" />
+          </label>
+          <label>Próxima cita - fecha
+            <input type="date" id="pacienteProxCitaFecha" />
+          </label>
+          <label>Próxima cita - hora
+            <input type="time" id="pacienteProxCitaHora" />
           </label>
           <label class="form-full">Notas
             <textarea id="pacienteNotas" rows="2" placeholder="Antecedentes, diagnóstico inicial..."></textarea>
@@ -96,7 +115,9 @@
       </div>
 
       <div class="panel">
-        <h2>Buscar paciente</h2>
+        <div class="panel-head">
+          <h2>Buscar paciente</h2>
+        </div>
         <div class="search-bar">
           <input type="text" id="buscarPaciente" placeholder="Buscar por nombre o código..." />
           <span class="material-symbols-outlined">search</span>
@@ -104,8 +125,29 @@
         <div id="listaPacientes" class="list"></div>
       </div>
 
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Pacientes sin cita</h2>
+          <span class="tag" id="countSinCita">0</span>
+        </div>
+        <div id="listaSinCitas" class="list"></div>
+      </div>
+
       <div class="panel" id="detallePacientePanel" hidden>
-        <h2>Ficha del paciente</h2>
+        <div class="panel-head">
+          <h2>Ficha del paciente</h2>
+          <div class="panel-actions">
+            <button type="button" id="btnWhatsappFicha" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">chat</span> WhatsApp
+            </button>
+            <button type="button" id="btnCorreoFicha" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">mail</span> Correo
+            </button>
+            <button type="button" id="btnImprimirFicha" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">print</span> Imprimir ficha
+            </button>
+          </div>
+        </div>
         <div id="detallePaciente"></div>
       </div>
     </section>
@@ -127,11 +169,25 @@
             <input type="text" id="citaMotivo" placeholder="Motivo de la consulta" />
           </label>
           <button type="submit" class="btn btn--primary form-full">Agendar cita</button>
+          <p class="limite-info" id="citaLimiteInfo"></p>
         </form>
       </div>
 
       <div class="panel">
-        <h2>Lista de citas</h2>
+        <div class="panel-head">
+          <h2>Lista de citas</h2>
+          <div class="panel-actions">
+            <button type="button" id="btnWhatsappTurnos" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">chat</span> WhatsApp
+            </button>
+            <button type="button" id="btnCorreoTurnos" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">mail</span> Correo
+            </button>
+            <button type="button" id="btnImprimirTurnos" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">print</span> Imprimir turnos
+            </button>
+          </div>
+        </div>
         <div id="listaCitas" class="list"></div>
       </div>
     </section>
@@ -154,7 +210,20 @@
       </div>
 
       <div class="panel">
-        <h2>Registros guardados</h2>
+        <div class="panel-head">
+          <h2>Registros guardados</h2>
+          <div class="panel-actions">
+            <button type="button" id="btnWhatsappResultados" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">chat</span> WhatsApp
+            </button>
+            <button type="button" id="btnCorreoResultados" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">mail</span> Correo
+            </button>
+            <button type="button" id="btnImprimirResultados" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">print</span> Imprimir resultados
+            </button>
+          </div>
+        </div>
         <div class="search-bar">
           <input type="text" id="buscarRegistro" placeholder="Buscar por paciente o título..." />
           <span class="material-symbols-outlined">search</span>
@@ -217,6 +286,8 @@
       </div>
     </section>
   </main>
+
+  <div id="printArea"></div>
 
   <script src="app.js"></script>
 </body>

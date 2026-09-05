@@ -193,6 +193,26 @@ button {
   margin-top: 0.8em;
 }
 
+.btn--ghost-dark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: transparent;
+  color: var(--color-navy);
+  border: 1.5px solid rgba(27, 42, 74, 0.3);
+  padding: 0.6em 1.2em;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn--ghost-dark:hover {
+  background: var(--color-navy);
+  color: var(--color-white);
+}
+
 /* ============================================
    NAVBAR / MENÚ LATERAL (carpeta archivos)
    ============================================ */
@@ -440,6 +460,29 @@ body.menu-open #rotador {
   border-bottom: 2px solid var(--color-cream);
 }
 
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.8em;
+  margin-bottom: 1em;
+  padding-bottom: 0.6em;
+  border-bottom: 2px solid var(--color-cream);
+}
+
+.panel-head h2 {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+
 /* ============================================
    FORMULARIOS
    ============================================ */
@@ -604,6 +647,108 @@ textarea {
   display: flex;
   gap: 0.8em;
   flex-wrap: wrap;
+}
+
+.prox-cita {
+  margin-top: 0.8em;
+  background: var(--color-cream);
+  border: 1px solid rgba(27, 42, 74, 0.1);
+  border-radius: 10px;
+  padding: 0.6em 1em;
+  font-size: 0.9rem;
+  color: var(--color-navy);
+}
+
+.limite-info {
+  font-size: 0.8rem;
+  color: rgba(26, 26, 46, 0.55);
+  margin-top: 0.4em;
+}
+
+.limite-info.limite-error {
+  color: #c0392b;
+  font-weight: 700;
+}
+
+.btn-small {
+  padding: 0.5em 1.1em;
+  font-size: 0.82rem;
+}
+
+/* ============================================
+   IMPRESIÓN (PDF)
+   ============================================ */
+#printArea {
+  display: none;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  body > *:not(#printArea) {
+    display: none !important;
+  }
+
+  #printArea {
+    display: block !important;
+    padding: 1rem;
+    font-size: 12px;
+    color: #000;
+  }
+
+  #printArea h1 {
+    color: var(--color-navy);
+    font-size: 20px;
+    margin-bottom: 6px;
+  }
+
+  #printArea .print-meta {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #999;
+  }
+
+  #printArea table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+
+  #printArea th,
+  #printArea td {
+    border: 1px solid #999;
+    padding: 6px 8px;
+    text-align: left;
+  }
+
+  #printArea th {
+    background: #f0e6de;
+  }
+
+  #printArea .print-item {
+    margin-bottom: 14px;
+    page-break-inside: avoid;
+  }
+
+  #printArea .print-item h3 {
+    font-size: 14px;
+    color: var(--color-navy);
+    margin-bottom: 2px;
+  }
+
+  #printArea .print-fecha {
+    font-size: 11px;
+    color: #666;
+  }
+
+  #printArea .print-item p {
+    margin-top: 4px;
+    line-height: 1.5;
+  }
 }
 
 .ficha-stats span {

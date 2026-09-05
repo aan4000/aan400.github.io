@@ -32,6 +32,42 @@ const PROCEDIMIENTOS = [
   { nombre: "Cirugía menor", precio: 300 }
 ];
 
+function genTurno(fecha) {
+  return State.citas.filter(c => c.fecha === fecha).length + 1;
+}
+
+const LIMITE_DIA_CITAS = 30;
+const LIMITE_SEMANA_CITAS = 150;
+
+function citasEnDia(fecha) {
+  return State.citas.filter(c => c.fecha === fecha).length;
+}
+
+function inicioSemana(fechaStr) {
+  const d = new Date(fechaStr + "T00:00:00");
+  const diff = (d.getDay() === 0 ? -6 : 1 - d.getDay());
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().split("T")[0];
+}
+
+function citasEnSemana(fechaStr) {
+  const inicio = inicioSemana(fechaStr);
+  const fin = new Date(inicio + "T00:00:00");
+  fin.setDate(fin.getDate() + 6);
+  const finISO = fin.toISOString().split("T")[0];
+  return State.citas.filter(c => c.fecha >= inicio && c.fecha <= finISO).length;
+}
+
+function validarLimiteCitas(fecha) {
+  if (citasEnDia(fecha) >= LIMITE_DIA_CITAS) {
+    return `Límite diario alcanzado (${LIMITE_DIA_CITAS} citas ese día).`;
+  }
+  if (citasEnSemana(fecha) >= LIMITE_SEMANA_CITAS) {
+    return `Límite semanal alcanzado (${LIMITE_SEMANA_CITAS} citas en la semana).`;
+  }
+  return null;
+}
+
 function saveKey(key) {
   DB.set("orto_" + key, State[key]);
 }
@@ -170,8 +206,9 @@ function renderPacientes(filtro = "") {
       <div class="item-main">
         <strong>${p.nombre}</strong>
         <span class="tag">${p.codigo}</span>
+        ${p.cedula ? `<span class="tag">Cédula: ${p.cedula}</span>` : ""}
       </div>
-      <div class="item-sub">Edad: ${p.edad || "-"} · Sexo: ${p.sexo || "-"} · Tel: ${p.telefono || "-"}</div>
+      <div class="item-sub">Edad: ${p.edad || "-"} · Sexo: ${p.sexo || "-"} · Seguro: ${p.seguro || "-"} · Tel: ${p.telefono || "-"}</div>
       <div class="item-actions">
         <button class="btn-icon" data-ver="${p.id}" title="Ver ficha">
           <span class="material-symbols-outlined">visibility</span>
@@ -191,14 +228,76 @@ function renderPacientes(filtro = "") {
   );
 }
 
+let pacienteActual = null;
+
+function renderPacientesSinCita() {
+  const lista = document.getElementById("listaSinCitas");
+  const countEl = document.getElementById("countSinCita");
+  if (!lista) return;
+
+  const sinCita = State.pacientes.filter(p => !State.citas.some(c => c.pacienteId === p.id));
+  if (countEl) countEl.textContent = sinCita.length;
+
+  if (sinCita.length === 0) {
+    lista.innerHTML = `<p class="empty">Todos los pacientes tienen al menos una cita.</p>`;
+    return;
+  }
+
+  lista.innerHTML = sinCita.map(p => `
+    <div class="list-item">
+      <div class="item-main">
+        <strong>${p.nombre}</strong>
+        <span class="tag">${p.codigo}</span>
+      </div>
+      <div class="item-sub">Cédula: ${p.cedula || "-"} · Seguro: ${p.seguro || "-"}</div>
+      <div class="item-actions">
+        <button class="btn btn--primary btn-small" data-agendar="${p.id}">
+          <span class="material-symbols-outlined">event</span> Agendar cita
+        </button>
+      </div>
+    </div>
+  `).join("");
+
+  lista.querySelectorAll("[data-agendar]").forEach(b =>
+    b.addEventListener("click", () => agendarPacienteSinCita(Number(b.dataset.agendar)))
+  );
+}
+
+function agendarPacienteSinCita(id) {
+  const sel = document.getElementById("citaPaciente");
+  if (sel) sel.value = id;
+  mostrarSeccion("citas");
+}
+
+function updateCitaLimiteInfo() {
+  const el = document.getElementById("citaLimiteInfo");
+  if (!el) return;
+  const fecha = document.getElementById("citaFecha") ? document.getElementById("citaFecha").value : "";
+  if (!fecha) {
+    el.textContent = "";
+    el.classList.remove("limite-error");
+    return;
+  }
+  const enDia = citasEnDia(fecha);
+  const enSemana = citasEnSemana(fecha);
+  el.textContent = `Citas ese día: ${enDia}/${LIMITE_DIA_CITAS} · Citas en la semana: ${enSemana}/${LIMITE_SEMANA_CITAS}`;
+  el.classList.toggle("limite-error", validarLimiteCitas(fecha) !== null);
+}
+
 function verPaciente(id) {
   const p = State.pacientes.find(x => x.id === id);
   const panel = document.getElementById("detallePacientePanel");
   const cont = document.getElementById("detallePaciente");
   if (!p || !panel || !cont) return;
+  pacienteActual = id;
 
   const citas = State.citas.filter(c => c.pacienteId === id);
   const documentos = State.documentos.filter(d => d.pacienteId === id);
+  const hoy = new Date().toISOString().split("T")[0];
+  const proximas = State.citas
+    .filter(c => c.pacienteId === id && c.fecha >= hoy)
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  const prox = proximas[0];
 
   cont.innerHTML = `
     <div class="ficha">
@@ -206,9 +305,14 @@ function verPaciente(id) {
         <span class="tag">${p.codigo}</span>
         <h3>${p.nombre}</h3>
       </div>
+      <p><strong>Cédula:</strong> ${p.cedula || "-"} · <strong>Seguro:</strong> ${p.seguro || "-"}</p>
       <p><strong>Edad:</strong> ${p.edad || "-"} · <strong>Sexo:</strong> ${p.sexo || "-"}</p>
       <p><strong>Teléfono:</strong> ${p.telefono || "-"} · <strong>Correo:</strong> ${p.email || "-"}</p>
       <p><strong>Notas:</strong> ${p.notas || "Sin notas"}</p>
+      <div class="prox-cita">
+        <strong>Próxima cita:</strong>
+        ${prox ? `${prox.fecha} · ${prox.hora} — ${prox.motivo}` : "Sin cita programada"}
+      </div>
       <div class="ficha-stats">
         <span>${citas.length} citas</span>
         <span>${documentos.length} documentos</span>
@@ -217,6 +321,38 @@ function verPaciente(id) {
   `;
   panel.hidden = false;
   panel.scrollIntoView({ behavior: "smooth" });
+}
+
+function imprimirFichaPaciente(id) {
+  const p = State.pacientes.find(x => x.id === id);
+  if (!p) return;
+  const citas = State.citas.filter(c => c.pacienteId === id);
+  const documentos = State.documentos.filter(d => d.pacienteId === id);
+  const hoy = new Date().toISOString().split("T")[0];
+  const proximas = State.citas
+    .filter(c => c.pacienteId === id && c.fecha >= hoy)
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  const prox = proximas[0];
+
+  abrirImpresion("Ficha del paciente", `
+    <div class="ficha-print-head">
+      <h3>${p.nombre}</h3>
+      <span>Código: ${p.codigo}</span>
+    </div>
+    <table>
+      <tbody>
+        <tr><td><strong>Cédula</strong></td><td>${p.cedula || "-"}</td></tr>
+        <tr><td><strong>Seguro</strong></td><td>${p.seguro || "-"}</td></tr>
+        <tr><td><strong>Edad</strong></td><td>${p.edad || "-"}</td></tr>
+        <tr><td><strong>Sexo</strong></td><td>${p.sexo || "-"}</td></tr>
+        <tr><td><strong>Teléfono</strong></td><td>${p.telefono || "-"}</td></tr>
+        <tr><td><strong>Correo</strong></td><td>${p.email || "-"}</td></tr>
+        <tr><td><strong>Próxima cita</strong></td><td>${prox ? `${prox.fecha} · ${prox.hora} — ${prox.motivo}` : "Sin cita programada"}</td></tr>
+        <tr><td><strong>Notas</strong></td><td>${p.notas || "Sin notas"}</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:8px"><strong>Citas:</strong> ${citas.length} · <strong>Documentos:</strong> ${documentos.length}</p>
+  `);
 }
 
 function borrarPaciente(id) {
@@ -266,6 +402,7 @@ function renderCitas() {
         <div class="item-main">
           <strong>${p ? p.nombre : "Paciente eliminado"}</strong>
           <span class="tag">${c.fecha} · ${c.hora}</span>
+          <span class="tag">Turno ${c.turno || "—"}</span>
         </div>
         <div class="item-sub">${c.motivo || "Sin motivo"} · ${fechaTxt}</div>
         <div class="item-actions">
@@ -414,11 +551,140 @@ function renderProximasCitas() {
         <div class="item-main">
           <strong>${p ? p.nombre : "Paciente eliminado"}</strong>
           <span class="tag">${c.fecha} · ${c.hora}</span>
+          <span class="tag">Turno ${c.turno || "—"}</span>
         </div>
         <div class="item-sub">${c.motivo || "Consulta"}</div>
       </div>
     `;
   }).join("");
+}
+
+function abrirImpresion(titulo, cuerpo) {
+  const area = document.getElementById("printArea");
+  if (!area) return;
+  const emitido = new Date().toLocaleString("es-ES", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
+  });
+  area.innerHTML = `
+    <h1>${titulo}</h1>
+    <div class="print-meta">Emitido: ${emitido} · Usuario: ${State.session ? State.session.name : ""}</div>
+    ${cuerpo}
+  `;
+  window.print();
+}
+
+function imprimirTurnos() {
+  const data = [...State.citas].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  if (data.length === 0) {
+    alert("No hay citas para imprimir.");
+    return;
+  }
+
+  const filas = data.map((c, i) => {
+    const p = State.pacientes.find(x => x.id === c.pacienteId);
+    return `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.fecha}</td>
+        <td>${c.hora}</td>
+        <td>${c.turno || "—"}</td>
+        <td>${p ? p.nombre : "Paciente eliminado"}${p && p.cedula ? ` (${p.cedula})` : ""}</td>
+        <td>${c.motivo || ""}</td>
+      </tr>
+    `;
+  }).join("");
+
+  abrirImpresion("Tabla de turnos — Citas", `
+    <table>
+      <thead>
+        <tr><th>#</th><th>Fecha</th><th>Hora</th><th>Turno</th><th>Paciente</th><th>Motivo</th></tr>
+      </thead>
+      <tbody>${filas}</tbody>
+    </table>
+  `);
+}
+
+function imprimirResultados() {
+  const data = [...State.registros].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  if (data.length === 0) {
+    alert("No hay resultados para imprimir.");
+    return;
+  }
+
+  const items = data.map(r => {
+    const p = State.pacientes.find(x => x.id === r.pacienteId);
+    return `
+      <div class="print-item">
+        <h3>${r.titulo} — ${p ? p.nombre : "Paciente eliminado"}</h3>
+        <span class="print-fecha">${r.fecha}</span>
+        <p>${r.detalle || "Sin detalle"}</p>
+      </div>
+    `;
+  }).join("");
+
+  abrirImpresion("Resultados / Registros médicos", items);
+}
+
+function textoTurnos() {
+  const data = [...State.citas].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  if (data.length === 0) {
+    alert("No hay citas para compartir.");
+    return null;
+  }
+  return data.map((c, i) => {
+    const p = State.pacientes.find(x => x.id === c.pacienteId);
+    return `${i + 1}. ${c.fecha} ${c.hora} | Turno ${c.turno || "—"} | ${p ? p.nombre : "Paciente eliminado"}${p && p.cedula ? " (" + p.cedula + ")" : ""} | ${c.motivo || ""}`;
+  }).join("\n");
+}
+
+function textoResultados() {
+  const data = [...State.registros].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  if (data.length === 0) {
+    alert("No hay resultados para compartir.");
+    return null;
+  }
+  return data.map(r => {
+    const p = State.pacientes.find(x => x.id === r.pacienteId);
+    return `${r.titulo} — ${p ? p.nombre : "Paciente eliminado"} (${r.fecha})\n${r.detalle || "Sin detalle"}`;
+  }).join("\n\n");
+}
+
+function textoFichaPaciente(id) {
+  const p = State.pacientes.find(x => x.id === id);
+  if (!p) return null;
+  const citas = State.citas.filter(c => c.pacienteId === id);
+  const documentos = State.documentos.filter(d => d.pacienteId === id);
+  const hoy = new Date().toISOString().split("T")[0];
+  const proximas = State.citas
+    .filter(c => c.pacienteId === id && c.fecha >= hoy)
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+  const prox = proximas[0];
+
+  return [
+    `Código: ${p.codigo}`,
+    `Cédula: ${p.cedula || "-"}`,
+    `Seguro: ${p.seguro || "-"}`,
+    `Edad: ${p.edad || "-"} · Sexo: ${p.sexo || "-"}`,
+    `Teléfono: ${p.telefono || "-"}`,
+    `Correo: ${p.email || "-"}`,
+    `Próxima cita: ${prox ? `${prox.fecha} · ${prox.hora} — ${prox.motivo}` : "Sin cita programada"}`,
+    `Notas: ${p.notas || "Sin notas"}`,
+    `Citas: ${citas.length} · Documentos: ${documentos.length}`
+  ].join("\n");
+}
+
+function compartirWhatsApp(titulo, texto, telefono) {
+  const enc = encodeURIComponent(`${titulo}\n\n${texto}`);
+  const num = (telefono || "").replace(/[^\d]/g, "");
+  const url = num
+    ? `https://wa.me/${num}?text=${enc}`
+    : `https://wa.me/?text=${enc}`;
+  window.open(url, "_blank");
+}
+
+function compartirCorreo(titulo, texto) {
+  const url = `mailto:?subject=${encodeURIComponent(titulo)}&body=${encodeURIComponent(texto)}`;
+  window.open(url, "_blank");
 }
 
 function renderHome() {
@@ -427,6 +693,8 @@ function renderHome() {
   document.getElementById("statRegistros").textContent = State.registros.length;
   document.getElementById("statDocumentos").textContent = State.documentos.length;
   document.getElementById("statFacturas").textContent = State.facturas.length;
+  document.getElementById("statSinCita").textContent =
+    State.pacientes.filter(p => !State.citas.some(c => c.pacienteId === p.id)).length;
   renderProximasCitas();
 }
 
@@ -570,6 +838,8 @@ function initApp() {
         id: Date.now(),
         codigo: document.getElementById("pacienteCodigo").value,
         nombre: document.getElementById("pacienteNombre").value.trim(),
+        cedula: document.getElementById("pacienteCedula").value.trim(),
+        seguro: document.getElementById("pacienteSeguro").value.trim(),
         edad: document.getElementById("pacienteEdad").value.trim(),
         sexo: document.getElementById("pacienteSexo").value,
         telefono: document.getElementById("pacienteTelefono").value.trim(),
@@ -578,6 +848,27 @@ function initApp() {
       };
       State.pacientes.push(paciente);
       saveKey("pacientes");
+
+      const proxFecha = document.getElementById("pacienteProxCitaFecha").value;
+      const proxHora = document.getElementById("pacienteProxCitaHora").value;
+      if (proxFecha) {
+        const error = validarLimiteCitas(proxFecha);
+        if (error) {
+          alert("El paciente se guardó, pero no se pudo agendar su próxima cita: " + error);
+        } else {
+          State.citas.push({
+            id: Date.now() + 1,
+            pacienteId: paciente.id,
+            fecha: proxFecha,
+            hora: proxHora || "09:00",
+            motivo: "Próxima cita",
+            turno: genTurno(proxFecha)
+          });
+          saveKey("citas");
+          renderCitas();
+        }
+      }
+
       pacienteForm.reset();
       document.getElementById("pacienteCodigo").value = genCodigoPaciente();
       renderPacientes();
@@ -591,6 +882,70 @@ function initApp() {
     buscarPaciente.addEventListener("input", () => renderPacientes(buscarPaciente.value));
   }
 
+  const btnImprimirFicha = document.getElementById("btnImprimirFicha");
+  if (btnImprimirFicha) {
+    btnImprimirFicha.addEventListener("click", () => {
+      if (pacienteActual) imprimirFichaPaciente(pacienteActual);
+    });
+  }
+
+  const btnWhatsappFicha = document.getElementById("btnWhatsappFicha");
+  if (btnWhatsappFicha) {
+    btnWhatsappFicha.addEventListener("click", () => {
+      if (!pacienteActual) return;
+      const texto = textoFichaPaciente(pacienteActual);
+      const p = State.pacientes.find(x => x.id === pacienteActual);
+      if (texto != null) compartirWhatsApp("Ficha del paciente", texto, p ? p.telefono : "");
+    });
+  }
+
+  const btnCorreoFicha = document.getElementById("btnCorreoFicha");
+  if (btnCorreoFicha) {
+    btnCorreoFicha.addEventListener("click", () => {
+      if (!pacienteActual) return;
+      const texto = textoFichaPaciente(pacienteActual);
+      if (texto != null) compartirCorreo("Ficha del paciente", texto);
+    });
+  }
+
+  const btnImprimirTurnos = document.getElementById("btnImprimirTurnos");
+  if (btnImprimirTurnos) btnImprimirTurnos.addEventListener("click", imprimirTurnos);
+
+  const btnWhatsappTurnos = document.getElementById("btnWhatsappTurnos");
+  if (btnWhatsappTurnos) {
+    btnWhatsappTurnos.addEventListener("click", () => {
+      const texto = textoTurnos();
+      if (texto != null) compartirWhatsApp("Tabla de turnos — Citas", texto);
+    });
+  }
+
+  const btnCorreoTurnos = document.getElementById("btnCorreoTurnos");
+  if (btnCorreoTurnos) {
+    btnCorreoTurnos.addEventListener("click", () => {
+      const texto = textoTurnos();
+      if (texto != null) compartirCorreo("Tabla de turnos — Citas", texto);
+    });
+  }
+
+  const btnImprimirResultados = document.getElementById("btnImprimirResultados");
+  if (btnImprimirResultados) btnImprimirResultados.addEventListener("click", imprimirResultados);
+
+  const btnWhatsappResultados = document.getElementById("btnWhatsappResultados");
+  if (btnWhatsappResultados) {
+    btnWhatsappResultados.addEventListener("click", () => {
+      const texto = textoResultados();
+      if (texto != null) compartirWhatsApp("Resultados / Registros médicos", texto);
+    });
+  }
+
+  const btnCorreoResultados = document.getElementById("btnCorreoResultados");
+  if (btnCorreoResultados) {
+    btnCorreoResultados.addEventListener("click", () => {
+      const texto = textoResultados();
+      if (texto != null) compartirCorreo("Resultados / Registros médicos", texto);
+    });
+  }
+
   const citaForm = document.getElementById("citaForm");
   if (citaForm) {
     const today = new Date();
@@ -599,20 +954,34 @@ function initApp() {
 
     citaForm.addEventListener("submit", (e) => {
       e.preventDefault();
+      const fecha = document.getElementById("citaFecha").value;
+      const error = validarLimiteCitas(fecha);
+      if (error) {
+        alert(error);
+        updateCitaLimiteInfo();
+        return;
+      }
       const cita = {
         id: Date.now(),
         pacienteId: Number(document.getElementById("citaPaciente").value),
-        fecha: document.getElementById("citaFecha").value,
+        fecha,
         hora: document.getElementById("citaHora").value,
-        motivo: document.getElementById("citaMotivo").value.trim() || "Consulta"
+        motivo: document.getElementById("citaMotivo").value.trim() || "Consulta",
+        turno: genTurno(fecha)
       };
       State.citas.push(cita);
       saveKey("citas");
       citaForm.reset();
       document.getElementById("citaFecha").valueAsDate = today;
       renderCitas();
+      renderPacientesSinCita();
       renderHome();
     });
+
+  const citaFecha = document.getElementById("citaFecha");
+  if (citaFecha) {
+    citaFecha.addEventListener("change", updateCitaLimiteInfo);
+  }
   }
 
   const registroForm = document.getElementById("registroForm");
@@ -725,23 +1094,31 @@ function initApp() {
 
   document.querySelectorAll(".nav-item").forEach(item => {
     item.addEventListener("click", () => {
-      const sec = item.dataset.seccion;
-      document.querySelectorAll(".seccion").forEach(s => s.classList.remove("active"));
-      const target = document.getElementById("seccion-" + sec);
-      if (target) target.classList.add("active");
-      const title = document.getElementById("pageTitle");
-      if (title) title.textContent = item.querySelector("a").textContent.trim();
+      mostrarSeccion(item.dataset.seccion);
     });
   });
 
   fillSelects();
   renderPacientes();
+  renderPacientesSinCita();
   renderCitas();
   renderRegistros();
   renderDocumentos();
   renderFacturas();
   renderFacturaItems();
+  updateCitaLimiteInfo();
   renderHome();
+}
+
+function mostrarSeccion(sec) {
+  document.querySelectorAll(".seccion").forEach(s => s.classList.remove("active"));
+  const target = document.getElementById("seccion-" + sec);
+  if (target) target.classList.add("active");
+  const title = document.getElementById("pageTitle");
+  if (title) {
+    const item = document.querySelector(`.nav-item[data-seccion="${sec}"] a`);
+    title.textContent = item ? item.textContent.trim() : sec;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
