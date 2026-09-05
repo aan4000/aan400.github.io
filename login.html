@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - Sistema Ortopedia</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+</head>
+<body class="login-body">
+
+  <main class="login-wrap">
+    <div class="login-card">
+      <div class="login-brand">
+        <span class="material-symbols-outlined">orthopedics</span>
+        <h1>Sistema Ortopedia</h1>
+        <p>Gestión de pacientes, citas y registros</p>
+      </div>
+
+      <div class="login-tabs">
+        <button class="tab active" id="tabLogin">Iniciar sesión</button>
+        <button class="tab" id="tabRegister">Crear usuario</button>
+      </div>
+
+      <form id="loginForm" class="login-form">
+        <label>
+          Correo electrónico
+          <input type="email" id="loginEmail" required placeholder="doctor@clinica.com" />
+        </label>
+        <label>
+          Contraseña
+          <input type="password" id="loginPassword" required placeholder="••••••••" />
+        </label>
+        <button type="submit" class="btn btn--primary btn--full">Entrar</button>
+        <p class="form-msg" id="loginMsg"></p>
+      </form>
+
+      <form id="registerForm" class="login-form hidden">
+        <label>
+          Nombre del doctor / usuario
+          <input type="text" id="regName" required placeholder="Dr. Nombre Apellido" />
+        </label>
+        <label>
+          Correo electrónico
+          <input type="email" id="regEmail" required placeholder="doctor@clinica.com" />
+        </label>
+        <label>
+          Contraseña
+          <input type="password" id="regPassword" required minlength="4" placeholder="Mínimo 4 caracteres" />
+        </label>
+        <button type="submit" class="btn btn--primary btn--full">Registrar usuario</button>
+        <p class="form-msg" id="regMsg"></p>
+      </form>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

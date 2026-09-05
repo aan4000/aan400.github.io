@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedHistorical - Sistema Ortopedia</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+</head>
+<body>
+
+  <div id="nav-container"></div>
+
+  <main class="app-main">
+    <header class="topbar">
+      <h1 id="pageTitle">Inicio</h1>
+      <span id="todayDate" class="topbar-date"></span>
+    </header>
+
+    <section id="seccion-inicio" class="seccion active">
+      <div class="stats">
+        <div class="stat-card">
+          <span class="material-symbols-outlined stat-icon">group</span>
+          <div>
+            <strong id="statPacientes">0</strong>
+            <span>Pacientes</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-symbols-outlined stat-icon">event</span>
+          <div>
+            <strong id="statCitas">0</strong>
+            <span>Citas registradas</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-symbols-outlined stat-icon">folder_open</span>
+          <div>
+            <strong id="statRegistros">0</strong>
+            <span>Registros</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-symbols-outlined stat-icon">folder_managed</span>
+          <div>
+            <strong id="statDocumentos">0</strong>
+            <span>Documentos</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="material-symbols-outlined stat-icon">receipt_long</span>
+          <div>
+            <strong id="statFacturas">0</strong>
+            <span>Facturas</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Próximas citas</h2>
+        <div id="proximasCitas" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-pacientes" class="seccion">
+      <div class="panel">
+        <h2>Registrar paciente</h2>
+        <form id="pacienteForm" class="form-grid">
+          <label>Código generado
+            <input type="text" id="pacienteCodigo" readonly />
+          </label>
+          <label>Nombre completo
+            <input type="text" id="pacienteNombre" required placeholder="Nombre del paciente" />
+          </label>
+          <label>Edad
+            <input type="number" id="pacienteEdad" min="0" max="120" placeholder="Edad" />
+          </label>
+          <label>Sexo
+            <select id="pacienteSexo">
+              <option value="No especificado">No especificado</option>
+              <option value="Masculino">Masculino</option>
+              <option value="Femenino">Femenino</option>
+            </select>
+          </label>
+          <label>Teléfono
+            <input type="tel" id="pacienteTelefono" placeholder="Teléfono" />
+          </label>
+          <label>Correo
+            <input type="email" id="pacienteEmail" placeholder="Correo (opcional)" />
+          </label>
+          <label class="form-full">Notas
+            <textarea id="pacienteNotas" rows="2" placeholder="Antecedentes, diagnóstico inicial..."></textarea>
+          </label>
+          <button type="submit" class="btn btn--primary form-full">Guardar paciente</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Buscar paciente</h2>
+        <div class="search-bar">
+          <input type="text" id="buscarPaciente" placeholder="Buscar por nombre o código..." />
+          <span class="material-symbols-outlined">search</span>
+        </div>
+        <div id="listaPacientes" class="list"></div>
+      </div>
+
+      <div class="panel" id="detallePacientePanel" hidden>
+        <h2>Ficha del paciente</h2>
+        <div id="detallePaciente"></div>
+      </div>
+    </section>
+
+    <section id="seccion-citas" class="seccion">
+      <div class="panel">
+        <h2>Nueva cita</h2>
+        <form id="citaForm" class="form-grid">
+          <label class="form-full">Paciente
+            <select id="citaPaciente" required></select>
+          </label>
+          <label>Fecha
+            <input type="date" id="citaFecha" required />
+          </label>
+          <label>Hora
+            <input type="time" id="citaHora" required />
+          </label>
+          <label>Motivo
+            <input type="text" id="citaMotivo" placeholder="Motivo de la consulta" />
+          </label>
+          <button type="submit" class="btn btn--primary form-full">Agendar cita</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Lista de citas</h2>
+        <div id="listaCitas" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-registros" class="seccion">
+      <div class="panel">
+        <h2>Nuevo registro</h2>
+        <form id="registroForm" class="form-grid">
+          <label class="form-full">Paciente
+            <select id="registroPaciente" required></select>
+          </label>
+          <label class="form-full">Título
+            <input type="text" id="registroTitulo" required placeholder="Ej: Consulta inicial" />
+          </label>
+          <label class="form-full">Detalle
+            <textarea id="registroDetalle" rows="3" placeholder="Descripción del registro..."></textarea>
+          </label>
+          <button type="submit" class="btn btn--primary form-full">Guardar registro</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Registros guardados</h2>
+        <div class="search-bar">
+          <input type="text" id="buscarRegistro" placeholder="Buscar por paciente o título..." />
+          <span class="material-symbols-outlined">search</span>
+        </div>
+        <div id="listaRegistros" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-documentos" class="seccion">
+      <div class="panel">
+        <h2>Subir documento</h2>
+        <form id="documentoForm" class="form-grid">
+          <label class="form-full">Paciente
+            <select id="documentoPaciente" required></select>
+          </label>
+          <label class="form-full">Descripción
+            <input type="text" id="documentoDescripcion" placeholder="Ej: Radiografía, Informe médico" />
+          </label>
+          <label class="form-full">Archivo (PDF, imagen)
+            <input type="file" id="documentoArchivo" accept=".pdf,image/*" required />
+          </label>
+          <button type="submit" class="btn btn--primary form-full">Subir archivo</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Documentos</h2>
+        <div id="listaDocumentos" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-facturacion" class="seccion">
+      <div class="panel">
+        <h2>Generar factura</h2>
+        <form id="facturaForm" class="form-grid">
+          <label class="form-full">Paciente
+            <select id="facturaPaciente" required></select>
+          </label>
+          <div class="form-full add-item-row">
+            <select id="facturaProcedimiento"></select>
+            <button type="button" id="agregarConcepto" class="btn btn--primary">Agregar procedimiento</button>
+          </div>
+          <div id="facturaItems" class="form-full list"></div>
+          <label class="form-full">Porcentaje de honorarios del doctor (%)
+            <input type="number" id="facturaPorcentaje" min="0" max="100" value="30" required />
+          </label>
+          <div class="form-full resumen" id="facturaResumen">
+            <p>Subtotal: <strong id="resumenSubtotal">$0.00</strong></p>
+            <p>Honorarios del doctor: <strong id="resumenHonorarios">$0.00</strong></p>
+            <p>Neto clínica: <strong id="resumenNeto">$0.00</strong></p>
+            <p class="total">Total a pagar: <strong id="resumenTotal">$0.00</strong></p>
+          </div>
+          <button type="submit" class="btn btn--primary form-full">Emitir factura</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Facturas emitidas</h2>
+        <div id="listaFacturas" class="list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
