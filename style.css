@@ -2064,3 +2064,98 @@ body.dark .help-tips strong {
 body.dark .help-tips li {
   color: rgba(232, 232, 242, 0.8);
 }
+/* ============================================
+   RECETAS MÉDICAS
+   ============================================ */
+.rec-hint {
+  font-size: 0.85rem;
+  color: var(--color-navy-soft);
+  opacity: 0.8;
+}
+
+.rec-med-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.8em;
+  background: var(--color-cream);
+  border: 1px solid rgba(27, 42, 74, 0.12);
+  border-radius: 12px;
+  padding: 1em;
+}
+
+.rec-med-grid .rec-med-fill {
+  grid-column: 1 / -1;
+}
+
+.num-unidad {
+  display: flex;
+  gap: 0.4em;
+}
+
+.num-unidad input,
+.num-unidad select {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.rec-med-quitar {
+  justify-self: end;
+  align-self: end;
+  margin-bottom: 0.2em;
+}
+
+.receta-head {
+  margin-bottom: 0.8rem;
+}
+
+.receta-head h3 {
+  margin: 0 0 0.3rem;
+  color: var(--color-navy);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.receta-head p {
+  margin: 0.15rem 0;
+  font-size: 0.95rem;
+}
+
+#recetaVista table th {
+  text-align: left;
+}
+
+.rec-print-tipo {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+body.dark .rec-hint {
+  color: rgba(232, 232, 242, 0.65);
+}
+
+body.dark .rec-med-grid {
+  background: var(--color-navy-soft);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.receta-subtitulo {
+  margin: 1rem 0 0.4rem;
+  color: var(--color-navy);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.rec-ind-print {
+  margin: 0;
+  padding-left: 1.3rem;
+}
+
+.rec-ind-print li {
+  margin: 0.2rem 0;
+  font-size: 0.95rem;
+}
+
+body.dark .receta-subtitulo {
+  color: #f0f0f8;
+}

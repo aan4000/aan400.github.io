@@ -20,6 +20,39 @@ Base.abrir()
       }
     });
 
+    app.post("/api/datos/:modelo", async (req, res) => {
+      const modelo = req.params.modelo;
+      if (!Array.isArray(req.body)) {
+        return res.status(400).json({ error: "Cuerpo inválido: se espera un arreglo" });
+      }
+      try {
+        await Base.reemplazarColeccion(app.locals.db, modelo, req.body);
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get("/api/config", async (req, res) => {
+      try {
+        res.json(await Base.cargarConfig(app.locals.db));
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/config", async (req, res) => {
+      if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+        return res.status(400).json({ error: "Cuerpo inválido" });
+      }
+      try {
+        await Base.guardarConfig(app.locals.db, req.body);
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.post("/api/datos", async (req, res) => {
       if (!req.body || typeof req.body !== "object") {
         return res.status(400).json({ error: "Cuerpo inválido" });

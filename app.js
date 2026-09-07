@@ -5,7 +5,8 @@ const MODELOS = {
   orto_registros: "registros",
   orto_documentos: "documentos",
   orto_facturas: "facturas",
-  orto_citas_sin_consulta: "citasSinConsulta"
+  orto_citas_sin_consulta: "citasSinConsulta",
+  orto_recetas: "recetas"
 };
 
 const traductorModelo = {
@@ -15,7 +16,8 @@ const traductorModelo = {
   registros: "registros",
   documentos: "documentos",
   facturas: "facturas",
-  citasSinConsulta: "citasSinConsulta"
+  citasSinConsulta: "citasSinConsulta",
+  recetas: "recetas"
 };
 
 const BD = (() => {
@@ -27,7 +29,8 @@ const BD = (() => {
       registros: [],
       documentos: [],
       facturas: [],
-      citasSinConsulta: []
+      citasSinConsulta: [],
+      recetas: []
     },
     config: {}
   };
@@ -35,19 +38,69 @@ const BD = (() => {
   let modo = "local";
   let cola = Promise.resolve();
 
+  const SESION_BACKUP = "orto_backup";
+  const COOKIE_MARCA = "orto_backup_ok=1";
+
+  function respaldarLocal() {
+    if (!cargado) return;
+    try {
+      sessionStorage.setItem(SESION_BACKUP, JSON.stringify(instante()));
+    } catch (err) {}
+    try {
+      document.cookie = COOKIE_MARCA + "; path=/; max-age=604800; SameSite=Lax";
+    } catch (err) {}
+  }
+
+  function leerRespaldoSesion() {
+    try {
+      const raw = sessionStorage.getItem(SESION_BACKUP);
+      if (!raw) return null;
+      const val = JSON.parse(raw);
+      return val && typeof val === "object" ? val : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function restaurarBackup(backup) {
+    for (const [claveLegacy, modelo] of Object.entries(MODELOS)) {
+      if (Array.isArray(backup[modelo]) && backup[modelo].length) {
+        cache.colecciones[modelo] = backup[modelo];
+      }
+    }
+    if (backup.config && typeof backup.config === "object") {
+      cache.config = backup.config;
+    }
+  }
+
   async function cargar() {
+    let restaurado = false;
     try {
       const res = await fetch("/api/datos");
       if (res.ok) {
         const datos = await res.json();
-        for (const [claveLegacy, modelo] of Object.entries(MODELOS)) {
-          cache.colecciones[modelo] = Array.isArray(datos[modelo]) ? datos[modelo] : [];
+        const vacio = Object.values(MODELOS).every(m => !(datos[m] && datos[m].length));
+        const respaldo = leerRespaldoSesion();
+        if (vacio && respaldo) {
+          restaurarBackup(respaldo);
+          restaurado = true;
+        } else {
+          for (const [claveLegacy, modelo] of Object.entries(MODELOS)) {
+            cache.colecciones[modelo] = Array.isArray(datos[modelo]) ? datos[modelo] : [];
+          }
+          cache.config = datos.config && typeof datos.config === "object" ? datos.config : {};
         }
-        cache.config = datos.config && typeof datos.config === "object" ? datos.config : {};
         modo = "servidor";
       }
     } catch (err) {
-      console.error("Sin conexión con la base local:", err);
+      const respaldo = leerRespaldoSesion();
+      if (respaldo) {
+        restaurarBackup(respaldo);
+        restaurado = true;
+        modo = "local";
+      } else {
+        console.error("Sin conexión con la base local:", err);
+      }
     }
 
     let migrado = false;
@@ -76,7 +129,8 @@ const BD = (() => {
 
     cargado = true;
     sincronizarState();
-    if (modo === "servidor" && migrado) guardar();
+    if (modo === "servidor" && (migrado || restaurado)) guardar();
+    respaldarLocal();
     return cache;
   }
 
@@ -88,6 +142,7 @@ const BD = (() => {
     State.documentos = cache.colecciones.documentos;
     State.facturas = cache.colecciones.facturas;
     State.citasSinConsulta = cache.colecciones.citasSinConsulta;
+    State.recetas = cache.colecciones.recetas;
     State.config = cache.config["orto_config"] ?? null;
     State.session = cache.config["orto_session"] ?? null;
   }
@@ -101,6 +156,7 @@ const BD = (() => {
       documentos: cache.colecciones.documentos,
       facturas: cache.colecciones.facturas,
       citasSinConsulta: cache.colecciones.citasSinConsulta,
+      recetas: cache.colecciones.recetas,
       config: cache.config
     };
   }
@@ -121,6 +177,40 @@ const BD = (() => {
         if (!res.ok) console.error("No se pudo guardar en la base local:", res.status);
       })
       .catch(err => console.error("No se pudo guardar en la base local:", err));
+  }
+
+  function guardarColeccion(modelo) {
+    if (!cargado || modo !== "servidor") return;
+    cola = cola
+      .catch(() => {})
+      .then(() =>
+        fetch("/api/datos/" + modelo, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cache.colecciones[modelo])
+        })
+      )
+      .then(res => {
+        if (!res.ok) console.error("No se pudo guardar la colección:", modelo, res.status);
+      })
+      .catch(err => console.error("No se pudo guardar la colección:", modelo, err));
+  }
+
+  function guardarConfigRemoto() {
+    if (!cargado || modo !== "servidor") return;
+    cola = cola
+      .catch(() => {})
+      .then(() =>
+        fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cache.config)
+        })
+      )
+      .then(res => {
+        if (!res.ok) console.error("No se pudo guardar la configuración:", res.status);
+      })
+      .catch(err => console.error("No se pudo guardar la configuración:", err));
   }
 
   function guardarAntesDeSalir() {
@@ -153,7 +243,12 @@ const BD = (() => {
         localStorage.setItem(clave, JSON.stringify(valor));
       } catch (err) {}
     }
-    guardar();
+    if (modelo) {
+      guardarColeccion(modelo);
+    } else {
+      guardarConfigRemoto();
+    }
+    respaldarLocal();
   }
 
   function sincronizarStateCache(clave) {
@@ -184,6 +279,7 @@ const State = {
   documentos: [],
   facturas: [],
   citasSinConsulta: [],
+  recetas: [],
   config: null
 };
 
@@ -215,6 +311,8 @@ const CONFIG_DEFECTO = {
   seccionDocumentos: true,
   seccionRegistros: true,
   seccionCitas: true,
+  seccionRecetas: true,
+  seccionPacientesEliminados: true,
   seccionPacientes: true,
   estadisticas: true,
   calendario: true,
@@ -431,17 +529,27 @@ function esAdmin() {
 }
 
 function actualizarAccesosAdmin() {
+  const admin = esAdmin();
   const btnAdmin = document.getElementById("btnAdmin");
   if (btnAdmin) {
-    const admin = esAdmin();
     btnAdmin.hidden = !admin;
     btnAdmin.classList.toggle("hidden", !admin);
   }
   const btnAyuda = document.getElementById("btnAyuda");
   if (btnAyuda) {
-    const admin = esAdmin();
     btnAyuda.hidden = !admin;
     btnAyuda.classList.toggle("hidden", !admin);
+  }
+  const subElim = document.querySelector('.nav-sub-item[data-seccion="pacientes-eliminados"]');
+  if (subElim) subElim.classList.toggle("hidden", !admin);
+  const regItem = document.querySelector('.nav-item[data-seccion="registros"]');
+  if (regItem) {
+    const caret = regItem.querySelector(".nav-caret");
+    const sub = regItem.querySelector(".nav-sub");
+    if (!admin) {
+      if (caret) caret.remove();
+      if (sub) sub.remove();
+    }
   }
 }
 
@@ -575,7 +683,9 @@ function crearUsuarioAdmin(e) {
 
 const OPCIONES_SISTEMA = [
   ["seccionPacientes", "Mostrar sección Pacientes"],
+  ["seccionPacientesEliminados", "Mostrar sección Pacientes eliminados"],
   ["seccionCitas", "Mostrar sección Citas"],
+  ["seccionRecetas", "Mostrar sección Recetas médicas"],
   ["seccionRegistros", "Mostrar sección Registros"],
   ["seccionDocumentos", "Mostrar sección Documentos"],
   ["seccionFacturacion", "Mostrar sección Facturación"],
@@ -630,6 +740,7 @@ function aplicarConfig() {
   const navMap = {
     pacientes: "seccionPacientes",
     citas: "seccionCitas",
+    recetas: "seccionRecetas",
     registros: "seccionRegistros",
     documentos: "seccionDocumentos",
     facturacion: "seccionFacturacion"
@@ -653,6 +764,11 @@ function aplicarConfig() {
   if (subSinConsulta) subSinConsulta.classList.toggle("hidden", cfg.citasSinConsulta === false);
   const secSinConsulta = document.getElementById("seccion-citas-sin-consulta");
   if (cfg.citasSinConsulta === false && secSinConsulta && secSinConsulta.classList.contains("active")) mostrarSeccion("inicio");
+
+  const subEliminados = document.querySelector('.nav-sub-item[data-seccion="pacientes-eliminados"]');
+  if (subEliminados) subEliminados.classList.toggle("hidden", cfg.seccionPacientesEliminados === false);
+  const secEliminados = document.getElementById("seccion-pacientes-eliminados");
+  if (cfg.seccionPacientesEliminados === false && secEliminados && secEliminados.classList.contains("active")) mostrarSeccion("inicio");
 
   const porId = {
     btnAbrirStatsPanel: "estadisticas",
@@ -717,6 +833,11 @@ function initNavigation() {
 
 function pacientesActivos() {
   return State.pacientes.filter(p => !p.eliminado);
+}
+
+function pacienteEliminadoDe(pacienteId) {
+  const p = State.pacientes.find(x => x.id === pacienteId);
+  return !!(p && p.eliminado);
 }
 
 function genCodigoPaciente() {
@@ -1042,6 +1163,7 @@ function borrarPaciente(id) {
   renderCitas();
   renderDocumentos();
   renderFacturas();
+  renderRecetas();
   renderRegistros();
   renderCitasAux();
   renderPacientesEliminados();
@@ -1057,7 +1179,7 @@ function renderPacientesEliminados() {
   if (countEl) countEl.textContent = eliminados.length;
 
   if (eliminados.length === 0) {
-    lista.innerHTML = `<p class="empty">No hay pacientes eliminados. Sus registros permanecen aquí hasta que los elimines definitivamente.</p>`;
+    lista.innerHTML = `<p class="empty">No hay pacientes eliminados. Cuando elimines un paciente de la sección Pacientes, aparecerá aquí para quitar sus datos definitivamente con tu contraseña.</p>`;
     return;
   }
 
@@ -1101,7 +1223,7 @@ function pedirEliminacionDefinitiva(id) {
     msg.className = "form-msg";
   }
   const texto = document.getElementById("confElimTexto");
-  if (texto) texto.textContent = `Se eliminarán definitivamente las citas, registros, documentos y facturas de "${p.nombre}" (${p.codigo}). Esta acción no se puede deshacer.`;
+  if (texto) texto.textContent = `Se eliminarán definitivamente las citas, citas sin consulta, registros, documentos, facturas y recetas de "${p.nombre}" (${p.codigo}). Esta acción no se puede deshacer.`;
   abrirModal("modalConfirmarEliminacion");
   if (pass) setTimeout(() => pass.focus(), 50);
 }
@@ -1131,7 +1253,8 @@ function confirmarEliminacionDefinitiva() {
   State.documentos = State.documentos.filter(d => d.pacienteId !== id);
   State.facturas = State.facturas.filter(f => f.pacienteId !== id);
   State.citasSinConsulta = State.citasSinConsulta.filter(c => c.pacienteId !== id);
-  ["pacientes", "citas", "registros", "documentos", "facturas", "citasSinConsulta"].forEach(saveKey);
+  State.recetas = State.recetas.filter(r => r.pacienteId !== id);
+  ["pacientes", "citas", "registros", "documentos", "facturas", "citasSinConsulta", "recetas"].forEach(saveKey);
   pendienteEliminarDef = null;
   cerrarModales();
   renderPacientes(document.getElementById("buscarPaciente").value);
@@ -1139,6 +1262,7 @@ function confirmarEliminacionDefinitiva() {
   renderCitasSinConsulta();
   renderDocumentos();
   renderFacturas();
+  renderRecetas();
   renderRegistros();
   renderCitasAux();
   renderPacientesEliminados();
@@ -1156,6 +1280,14 @@ function fillSelects() {
       sel.innerHTML = opts || `<option value="">Sin pacientes</option>`;
     }
   });
+
+  const recetaSel = document.getElementById("recetaPaciente");
+  if (recetaSel) {
+    recetaSel.innerHTML = pacientesActivos()
+      .map(p => `<option value="${p.id}">${p.codigo} — ${p.nombre} · ${p.edad ? p.edad + " años" : "s/e"}</option>`)
+      .join("") || `<option value="">Sin pacientes</option>`;
+  }
+  updateRecetaEdad();
 }
 
 function renderCitas() {
@@ -1188,9 +1320,9 @@ function renderCitas() {
           <button class="btn-icon" data-completar-cita="${c.id}" title="Marcar como completada">
             <span class="material-symbols-outlined">check_circle</span>
           </button>
-          <button class="btn-icon danger" data-borrar-cita="${c.id}" title="Eliminar cita">
+          ${pacienteEliminadoDe(c.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-cita="${c.id}" title="Eliminar cita">
             <span class="material-symbols-outlined">delete</span>
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -1243,9 +1375,9 @@ function renderCitasCompletadas() {
           <button class="btn-icon" data-reabrir-cita="${c.id}" title="Reabrir cita">
             <span class="material-symbols-outlined">undo</span>
           </button>
-          <button class="btn-icon danger" data-borrar-completada="${c.id}" title="Eliminar cita completada">
+          ${pacienteEliminadoDe(c.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-completada="${c.id}" title="Eliminar cita completada">
             <span class="material-symbols-outlined">delete</span>
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -1302,9 +1434,9 @@ function renderCitasSinConsulta() {
         </div>
         <div class="item-sub">${c.motivo || "Sin motivo"}</div>
         <div class="item-actions">
-          <button class="btn-icon danger" data-borrar-csc="${c.id}" title="Eliminar cita sin consulta">
+          ${pacienteEliminadoDe(c.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-csc="${c.id}" title="Eliminar cita sin consulta">
             <span class="material-symbols-outlined">delete</span>
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -1419,9 +1551,9 @@ function renderRegistros(filtro = "") {
           <button class="btn-icon" data-editar-reg="${r.id}" title="Editar registro">
             <span class="material-symbols-outlined">edit</span>
           </button>
-          <button class="btn-icon danger" data-borrar-reg="${r.id}" title="Eliminar registro">
+          ${pacienteEliminadoDe(r.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-reg="${r.id}" title="Eliminar registro">
             <span class="material-symbols-outlined">delete</span>
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -1478,9 +1610,9 @@ function renderDocumentos() {
           <button class="btn-icon" data-ver-doc="${d.id}" title="Ver archivo">
             <span class="material-symbols-outlined">download</span>
           </button>
-          <button class="btn-icon danger" data-borrar-doc="${d.id}" title="Eliminar">
+          ${pacienteEliminadoDe(d.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-doc="${d.id}" title="Eliminar">
             <span class="material-symbols-outlined">delete</span>
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -2240,9 +2372,9 @@ function renderCalDetalle() {
           <button class="btn-icon" data-editar-cal="${c.id}" title="Editar fecha y hora">
             <span class="material-symbols-outlined">edit</span>
           </button>
-          <button class="btn-icon danger" data-borrar-cal="${c.id}" title="Eliminar cita">
+          ${pacienteEliminadoDe(c.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-cal="${c.id}" title="Eliminar cita">
             <span class="material-symbols-outlined">delete</span>
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -2303,6 +2435,118 @@ function guardarEdicionCalendario() {
   renderCitas();
   renderHome();
 }
+
+let recetaMedsBus = [];
+let recetaIndsBus = [];
+let recetaActualId = null;
+
+const INDICACIONES_GRUPOS = [
+  {
+    grupo: "SONOGRAFÍA",
+    items: ["SONOGRAFIA DE PARTES BLANDAS DE:", "SONOGRAFIA MUSCULOESQUELETICA DE:"]
+  },
+  {
+    grupo: "RADIOGRAFÍA",
+    items: [
+      "RADIOGRAFIA DE COLUMNA CERVICAL AP/LAT",
+      "RADIOGRAFIA DE COLUMNA DORSOLUMBAR AP/LAT",
+      "RADIOGRAFIA DE COLUMNA DORSAL AP/LAT",
+      "RADIOGRAFIA DE COLUMNA LUMBAR AP/LAT",
+      "RADIOGRAFIA DE COLUMNA LUMBARSACRA AP/LAT",
+      "RADIOGRAFIA DE HOMBRO",
+      "RADIOGRAFIA DE BRAZO DERECHO AP/LAT",
+      "RADIOGRAFIA DE BRAZO IZQUIERDO AP/LAT",
+      "RADIOGRAFIA DE CODO DERECHO AP/LAT",
+      "RADIOGRAFIA DE CODO IZQUIERDO AP/LAT",
+      "RADIOGRAFIA DE ANTEBRAZO DERECHO AP/LAT",
+      "RADIOGRAFIA DE ANTEBRAZO IZQUIERDO AP/LAT",
+      "RADIOGRAFIA DE MUÑECA DERECHA AP/LAT",
+      "RADIOGRAFIA DE MUÑECA IZQUIERDA AP/LAT",
+      "RADIOGRAFIA DE MANO DERECHA AP/OBLICUA",
+      "RADIOGRAFIA DE MANO IZQUIERDA AP/OBLICUA",
+      "RADIOGRAFIA DE PELVIS AP",
+      "RADIOGRAFIA DE MUSLO DERECHO AP/LAT",
+      "RADIOGRAFIA DE MUSLO IZQUIERDO AP/LAT",
+      "RADIOGRAFIA DE RODILLA DERECHA AP/LAT",
+      "RADIOGRAFIA DE RODILLA IZQUIERDA AP/LAT",
+      "RADIOGRAFIA DE PIERNA DERECHA AP/LAT",
+      "RADIOGRAFIA DE PIERNA IZQUIERDA AP/LAT",
+      "RADIOGRAFIA DE TOBILLO DERECHO AP/LAT",
+      "RADIOGRAFIA DE TOBILLO IZQUIERDO AP/LAT",
+      "RADIOGRAFIA DE PIE DERECHO AP/OBLICUA",
+      "RADIOGRAFIA DE PIE IZQUIERDO AP/OBLICUA"
+    ]
+  },
+  {
+    grupo: "RESONANCIA MAGNÉTICA",
+    items: [
+      "RESONANCIA MAGNETICA CERVICAL",
+      "RESONANCIA MAGNETICA HOMBRO DERECHO",
+      "RESONANCIA MAGNETICA HOMBRO IZQUIERDO",
+      "RESONANCIA MAGNETICA CODO DERECHO",
+      "RESONANCIA MAGNETICA CODO IZQUIERDO",
+      "RESONANCIA MAGNETICA MUÑECA DERECHA",
+      "RESONANCIA MAGNETICA MUÑECA IZQUIERDA",
+      "RESONANCIA MAGNETICA RODILLA DERECHA",
+      "RESONANCIA MAGNETICA RODILLA IZQUIERDA",
+      "RESONANCIA MAGNETICA TOBILLO DERECHO",
+      "RESONANCIA MAGNETICA TOBILLO IZQUIERDO"
+    ]
+  },
+  {
+    grupo: "ELECTROMIOGRAFÍA",
+    items: [
+      "ELECTROMIOGRAFIA DE MIEMBROS SUPERIORES",
+      "ELECTROMIOGRAFIA DE MIEMBROS INFERIORES"
+    ]
+  },
+  {
+    grupo: "ANALÍTICAS PREQUIRÚRGICAS",
+    items: [
+      "HEMOGRAMA",
+      "TIPIFICACION",
+      "GLICEMIA",
+      "UREA-CREATININA",
+      "TGO-TGP",
+      "TP,TPT,INR",
+      "EXAMEN DE ORINA",
+      "HIV",
+      "HVC",
+      "HBSAG",
+      "VDRL"
+    ]
+  },
+  {
+    grupo: "EVALUACIÓN PREQUIRÚRGICA / REFERIDO A",
+    items: [
+      "CARDIOLOGIA",
+      "NEUMOLOGIA",
+      "ENDOCRINOLOGIA/DIABETOLOGIA",
+      "HEMATOLOGIA",
+      "NEUROLOGIA",
+      "INFECTOLOGIA"
+    ]
+  },
+  {
+    grupo: "PERFIL INFLAMATORIO BÁSICO",
+    items: [
+      "Hemograma completo",
+      "VSG",
+      "Proteína C reactiva (PCR)"
+    ]
+  },
+  {
+    grupo: "PERFIL AUTOINMUNE",
+    items: [
+      "Hemograma completo",
+      "VSG",
+      "Proteína C reactiva (PCR)",
+      "Factor reumatoide (FR)",
+      "Anticuerpos antinucleares (ANA)",
+      "Anti-CCP / anticuerpos antipéptido cíclico citrulinado"
+    ]
+  }
+];
 
 let facturaCarrito = [];
 
@@ -2393,9 +2637,9 @@ function renderFacturas() {
           <button class="btn-icon" data-det-factura="${f.id}" title="Ver detalle">
             <span class="material-symbols-outlined">expand_more</span>
           </button>
-          <button class="btn-icon danger" data-borrar-factura="${f.id}" title="Eliminar factura">
+          ${pacienteEliminadoDe(f.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-factura="${f.id}" title="Eliminar factura">
             <span class="material-symbols-outlined">delete</span>
-          </button>
+          </button>`}
         </div>
       </div>
     `;
@@ -2414,6 +2658,314 @@ function renderFacturas() {
       saveKey("facturas");
       renderFacturas();
       renderHome();
+    })
+  );
+}
+
+function agregarFilaMed() {
+  recetaMedsBus.push({
+    nombre: "",
+    tipo: "Generico",
+    via: "Oral",
+    dosis: "",
+    frecuencia: "",
+    frecuenciaUnidad: "horas",
+    duracion: "",
+    duracionUnidad: "dias"
+  });
+  renderRecetaMeds();
+}
+
+function quitarFilaMed(idx) {
+  recetaMedsBus.splice(idx, 1);
+  renderRecetaMeds();
+}
+
+function renderRecetaMeds() {
+  const cont = document.getElementById("recetaMeds");
+  if (!cont) return;
+  if (recetaMedsBus.length === 0) {
+    cont.innerHTML = `<p class="empty">Aún no has agregado medicamentos.</p>`;
+    return;
+  }
+  cont.innerHTML = recetaMedsBus.map((m, i) => `
+    <div class="rec-med-row">
+      <div class="rec-med-grid">
+        <label class="rec-med-fill">Medicamento
+          <input type="text" class="recMedNombre" value="${m.nombre}" placeholder="Ej: Ibuprofeno, Amoxicilina" required />
+        </label>
+        <label>Tipo
+          <select class="recMedTipo">
+            <option value="Generico" ${m.tipo === "Generico" ? "selected" : ""}>Genérico</option>
+            <option value="Comercial" ${m.tipo === "Comercial" ? "selected" : ""}>Comercial</option>
+          </select>
+        </label>
+        <label>Vía
+          <select class="recMedVia">
+            <option value="Oral" ${m.via === "Oral" ? "selected" : ""}>Oral</option>
+            <option value="Topica" ${m.via === "Topica" ? "selected" : ""}>Tópica</option>
+          </select>
+        </label>
+        <label class="rec-med-fill">Dosis exacta
+          <input type="text" class="recMedDosis" value="${m.dosis}" placeholder="Ej: 1 tableta de 500 mg en cada toma" />
+        </label>
+        <label>Cada
+          <div class="num-unidad">
+            <input type="number" class="recMedFrec" min="1" value="${m.frecuencia}" placeholder="Cant." />
+            <select class="recMedFrecUnidad">
+              <option value="horas" ${m.frecuenciaUnidad === "horas" ? "selected" : ""}>horas</option>
+              <option value="dias" ${m.frecuenciaUnidad === "dias" ? "selected" : ""}>días</option>
+            </select>
+          </div>
+        </label>
+        <label>Durante
+          <div class="num-unidad">
+            <input type="number" class="recMedDur" min="1" value="${m.duracion}" placeholder="Cant." />
+            <select class="recMedDurUnidad">
+              <option value="dias" ${m.duracionUnidad === "dias" ? "selected" : ""}>días</option>
+              <option value="semanas" ${m.duracionUnidad === "semanas" ? "selected" : ""}>semanas</option>
+              <option value="meses" ${m.duracionUnidad === "meses" ? "selected" : ""}>meses</option>
+            </select>
+          </div>
+        </label>
+        <button type="button" class="btn-icon danger rec-med-quitar" data-quitar-med="${i}" title="Quitar medicamento">
+          <span class="material-symbols-outlined">delete</span>
+        </button>
+      </div>
+    </div>
+  `).join("");
+
+  cont.querySelectorAll("[data-quitar-med]").forEach(b =>
+    b.addEventListener("click", () => quitarFilaMed(Number(b.dataset.quitarMed)))
+  );
+}
+
+function leerRecetaMeds() {
+  return [...document.querySelectorAll("#recetaMeds .rec-med-row")].map(r => ({
+    nombre: r.querySelector(".recMedNombre").value.trim(),
+    tipo: r.querySelector(".recMedTipo").value,
+    via: r.querySelector(".recMedVia").value,
+    dosis: r.querySelector(".recMedDosis").value.trim(),
+    frecuencia: r.querySelector(".recMedFrec").value.trim(),
+    frecuenciaUnidad: r.querySelector(".recMedFrecUnidad").value,
+    duracion: r.querySelector(".recMedDur").value.trim(),
+    duracionUnidad: r.querySelector(".recMedDurUnidad").value
+  })).filter(m => m.nombre || m.dosis || m.frecuencia || m.duracion);
+}
+
+function agregarFilaInd() {
+  recetaIndsBus.push({ detalle: "" });
+  renderRecetaInds();
+}
+
+function quitarFilaInd(idx) {
+  recetaIndsBus.splice(idx, 1);
+  renderRecetaInds();
+}
+
+function renderRecetaInds() {
+  const cont = document.getElementById("recetaInds");
+  if (!cont) return;
+  if (recetaIndsBus.length === 0) {
+    cont.innerHTML = `<p class="empty">Aún no has agregado indicaciones.</p>`;
+    return;
+  }
+  const opciones = INDICACIONES_GRUPOS.map(g => `
+    <optgroup label="${g.grupo}">
+      ${g.items.map((it, j) => `<option value="${j}">${it}</option>`).join("")}
+    </optgroup>
+  `).join("");
+  cont.innerHTML = recetaIndsBus.map((m, i) => `
+    <div class="rec-ind-row rec-med-row">
+      <div class="rec-med-grid">
+        <label class="rec-med-fill">Indicación / estudio
+          <select class="recIndNombre">${opciones}</select>
+        </label>
+        <label class="rec-med-fill">Detalle
+          <input type="text" class="recIndDetalle" value="${m.detalle}" placeholder="Opcional: completa el estudio (ej: rodilla izquierda)" />
+        </label>
+        <button type="button" class="btn-icon danger rec-med-quitar" data-quitar-ind="${i}" title="Quitar indicación">
+          <span class="material-symbols-outlined">delete</span>
+        </button>
+      </div>
+    </div>
+  `).join("");
+
+  cont.querySelectorAll("[data-quitar-ind]").forEach(b =>
+    b.addEventListener("click", () => quitarFilaInd(Number(b.dataset.quitarInd)))
+  );
+}
+
+function leerRecetaInds() {
+  return [...document.querySelectorAll("#recetaInds .rec-ind-row")].map(r => ({
+    nombre: r.querySelector(".recIndNombre").selectedOptions[0].textContent.trim(),
+    detalle: r.querySelector(".recIndDetalle").value.trim()
+  }));
+}
+
+function fmtRecetaInd(ind) {
+  return [ind.nombre, ind.detalle].filter(Boolean).join(" ");
+}
+
+function updateRecetaEdad() {
+  const sel = document.getElementById("recetaPaciente");
+  const edadEl = document.getElementById("recetaEdad");
+  if (!sel || !edadEl) return;
+  const p = State.pacientes.find(x => x.id === Number(sel.value));
+  edadEl.value = p ? (p.edad || "") : "";
+}
+
+function fmtRecetaMed(m) {
+  const partes = [];
+  if (m.nombre) partes.push(m.nombre + (m.tipo && m.tipo !== "Generico" ? ` (${m.tipo})` : ""));
+  if (m.via) partes.push("vía " + m.via.toLowerCase());
+  if (m.dosis) partes.push("dosis: " + m.dosis);
+  if (m.frecuencia) partes.push("cada " + m.frecuencia + " " + m.frecuenciaUnidad);
+  if (m.duracion) partes.push("durante " + m.duracion + " " + m.duracionUnidad);
+  return partes.join(" · ");
+}
+
+function guardarReceta(e) {
+  e.preventDefault();
+  const pacienteId = Number(document.getElementById("recetaPaciente").value);
+  if (!pacienteId) {
+    alert("Selecciona un paciente.");
+    return;
+  }
+  const meds = leerRecetaMeds();
+  const inds = leerRecetaInds();
+  if (meds.length === 0 && inds.length === 0) {
+    alert("Agrega al menos un medicamento o una indicación a la receta.");
+    return;
+  }
+  const p = State.pacientes.find(x => x.id === pacienteId);
+  const receta = {
+    id: Date.now(),
+    codigo: "REC-" + (1000 + State.recetas.length),
+    pacienteId,
+    fecha: document.getElementById("recetaFecha").value,
+    edad: p ? (p.edad || "") : "",
+    doctor: State.session ? State.session.name : "Doctor",
+    medicamentos: meds,
+    indicaciones: inds
+  };
+  State.recetas.push(receta);
+  saveKey("recetas");
+  recetaMedsBus = [];
+  renderRecetaMeds();
+  recetaIndsBus = [];
+  renderRecetaInds();
+  const form = document.getElementById("recetaForm");
+  form.reset();
+  document.getElementById("recetaFecha").valueAsDate = new Date();
+  if (p) document.getElementById("recetaPaciente").value = String(p.id);
+  updateRecetaEdad();
+  renderRecetas();
+  renderHome();
+  mostrarNotificacion(`Receta <b>${receta.codigo}</b> guardada correctamente`);
+}
+
+function cuerpoRecetaHTML(r) {
+  const p = State.pacientes.find(x => x.id === r.pacienteId);
+  const filas = (r.medicamentos || []).map((m, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${m.nombre || "-"}${m.tipo && m.tipo !== "Generico" ? `<br><span class="rec-print-tipo">${m.tipo}</span>` : ""}</td>
+      <td>${m.via || "-"}</td>
+      <td>${m.dosis || "-"}</td>
+      <td>${m.frecuencia ? "cada " + m.frecuencia + " " + m.frecuenciaUnidad : "-"}</td>
+      <td>${m.duracion ? m.duracion + " " + m.duracionUnidad : "-"}</td>
+    </tr>
+  `).join("");
+  const indsHTML = (r.indicaciones || []).map(ind =>
+    `<li>${fmtRecetaInd(ind)}</li>`
+  ).join("");
+
+  return `
+    <div class="receta-head">
+      <h3>${r.codigo} — Receta médica</h3>
+      <p><strong>${p ? p.nombre : "Paciente eliminado"}</strong>${r.edad ? ` · Edad: ${r.edad}` : ""}</p>
+      <p>Fecha: ${fmtFechaES(r.fecha)} · Dr(a). ${r.doctor}</p>
+    </div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Medicamento</th><th>Vía</th><th>Dosis</th><th>Frecuencia</th><th>Duración</th></tr>
+      </thead>
+      <tbody>${filas}</tbody>
+    </table>
+    ${(r.indicaciones || []).length ? `
+      <h4 class="receta-subtitulo">Indicaciones y estudios</h4>
+      <ul class="rec-ind-print">${indsHTML}</ul>` : ""}
+  `;
+}
+
+function verReceta(id) {
+  const r = State.recetas.find(x => x.id === id);
+  if (!r) return;
+  recetaActualId = id;
+  const vista = document.getElementById("recetaVista");
+  if (vista) vista.innerHTML = cuerpoRecetaHTML(r);
+  abrirModal("modalReceta");
+}
+
+function imprimirReceta(id) {
+  const r = State.recetas.find(x => x.id === id);
+  if (!r) return;
+  abrirImpresion("Receta médica — " + r.codigo, cuerpoRecetaHTML(r));
+}
+
+function renderRecetas() {
+  const lista = document.getElementById("listaRecetas");
+  if (!lista) return;
+  const countEl = document.getElementById("countRecetas");
+  if (countEl) countEl.textContent = State.recetas.length;
+
+  if (State.recetas.length === 0) {
+    lista.innerHTML = `<p class="empty">No hay recetas emitidas.</p>`;
+    return;
+  }
+
+  lista.innerHTML = [...State.recetas].reverse().map(r => {
+    const p = State.pacientes.find(x => x.id === r.pacienteId);
+    const meds = r.medicamentos || [];
+    const inds = r.indicaciones || [];
+    return `
+      <div class="list-item">
+        <div class="item-main">
+          <strong>${r.codigo}</strong>
+          <span class="tag">${fmtFechaES(r.fecha)}</span>
+          <span class="tag">${meds.length} medicamento(s)</span>
+          ${inds.length ? `<span class="tag">${inds.length} indicación(es)</span>` : ""}
+        </div>
+        <div class="item-sub">${p ? p.nombre : "Paciente eliminado"}${r.edad ? ` · Edad: ${r.edad}` : ""} · Dr(a). ${r.doctor}</div>
+        <div class="item-sub">${[...meds.map(fmtRecetaMed), ...inds.map(fmtRecetaInd)].join(" | ")}</div>
+        <div class="item-actions">
+          <button class="btn-icon" data-ver-receta="${r.id}" title="Ver receta">
+            <span class="material-symbols-outlined">visibility</span>
+          </button>
+          <button class="btn-icon" data-imprimir-receta="${r.id}" title="Imprimir receta">
+            <span class="material-symbols-outlined">print</span>
+          </button>
+          ${pacienteEliminadoDe(r.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-receta="${r.id}" title="Eliminar receta">
+            <span class="material-symbols-outlined">delete</span>
+          </button>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  lista.querySelectorAll("[data-ver-receta]").forEach(b =>
+    b.addEventListener("click", () => verReceta(Number(b.dataset.verReceta)))
+  );
+  lista.querySelectorAll("[data-imprimir-receta]").forEach(b =>
+    b.addEventListener("click", () => imprimirReceta(Number(b.dataset.imprimirReceta)))
+  );
+  lista.querySelectorAll("[data-borrar-receta]").forEach(b =>
+    b.addEventListener("click", () => {
+      if (!window.confirm("¿Eliminar esta receta?")) return;
+      State.recetas = State.recetas.filter(x => x.id !== Number(b.dataset.borrarReceta));
+      saveKey("recetas");
+      renderRecetas();
     })
   );
 }
@@ -2835,6 +3387,26 @@ function initApp() {
     });
   }
 
+  const recetaFormEl = document.getElementById("recetaForm");
+  if (recetaFormEl) {
+    const recetaFechaEl = document.getElementById("recetaFecha");
+    if (recetaFechaEl) recetaFechaEl.valueAsDate = new Date();
+    const recetaPacienteSel = document.getElementById("recetaPaciente");
+    if (recetaPacienteSel) recetaPacienteSel.addEventListener("change", updateRecetaEdad);
+    const btnAgregarMed = document.getElementById("btnAgregarMed");
+    if (btnAgregarMed) btnAgregarMed.addEventListener("click", agregarFilaMed);
+    const btnAgregarInd = document.getElementById("btnAgregarInd");
+    if (btnAgregarInd) btnAgregarInd.addEventListener("click", agregarFilaInd);
+    recetaFormEl.addEventListener("submit", guardarReceta);
+  }
+
+  const btnImprimirRecetaVista = document.getElementById("btnImprimirReceta");
+  if (btnImprimirRecetaVista) {
+    btnImprimirRecetaVista.addEventListener("click", () => {
+      if (recetaActualId) imprimirReceta(recetaActualId);
+    });
+  }
+
   document.querySelectorAll("[data-seccion]").forEach(item => {
     item.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -2921,6 +3493,7 @@ function initApp() {
   renderDocumentos();
   renderFacturas();
   renderFacturaItems();
+  renderRecetas();
   updateCitaLimiteInfo();
   renderPacientesEliminados();
   renderHome();
@@ -2934,9 +3507,11 @@ document.addEventListener("submit", (e) => {
 });
 
 function mostrarSeccion(sec) {
+  if (sec === "pacientes-eliminados" && !esAdmin()) sec = "inicio";
   document.querySelectorAll(".seccion").forEach(s => s.classList.remove("active"));
   const target = document.getElementById("seccion-" + sec);
   if (target) target.classList.add("active");
+  if (sec === "inicio") renderHome();
   const title = document.getElementById("pageTitle");
   if (title) {
     const item = document.querySelector(`.nav-item[data-seccion="${sec}"] > a, .nav-sub-item[data-seccion="${sec}"] > a`);
@@ -3026,7 +3601,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const navContainer = document.getElementById("nav-container");
 
   if (navContainer) {
-    const cachedNav = sessionStorage.getItem("navHTML_v7");
+    const cachedNav = sessionStorage.getItem("navHTML_v10");
     if (cachedNav) {
       navContainer.innerHTML = cachedNav;
       initApp();
@@ -3037,7 +3612,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           return response.text();
         })
         .then(data => {
-          sessionStorage.setItem("navHTML_v7", data);
+          sessionStorage.setItem("navHTML_v10", data);
           navContainer.innerHTML = data;
           initApp();
         })

@@ -40,6 +40,11 @@ const CATALOGO = {
     tabla: "citas_sin_consulta",
     campos: ["id", "pacienteId", "fecha", "hora", "amPm", "motivo", "turno"],
     json: []
+  },
+  recetas: {
+    tabla: "recetas",
+    campos: ["id", "codigo", "pacienteId", "fecha", "edad", "doctor"],
+    json: ["medicamentos"]
   }
 };
 
@@ -115,20 +120,73 @@ function datoAFila(modelo, dato) {
   });
 }
 
+async function cargarConfig(db) {
+  const filas = await consultar(db, "SELECT clave, valor FROM config");
+  const cfg = {};
+  for (const f of filas) {
+    try {
+      cfg[f.clave] = JSON.parse(f.valor);
+    } catch {
+      cfg[f.clave] = f.valor;
+    }
+  }
+  return cfg;
+}
+
+async function cargarColeccion(db, clave) {
+  const modelo = CATALOGO[clave];
+  if (!modelo) throw new Error("Colección desconocida: " + clave);
+  const filas = await consultar(db, `SELECT * FROM "${modelo.tabla}"`);
+  return filas.map(f => filaADato(modelo, f));
+}
+
+async function fondoColeccion(db, modelo, datos) {
+  const filas = datos.map(d => datoAFila(modelo, d));
+  await ejecutar(db, `DELETE FROM "${modelo.tabla}"`);
+  if (filas.length) {
+    const columnas = modelo.campos.map(c => '"' + c + '"').join(", ");
+    const placeholders = modelo.campos.map(() => "?").join(", ");
+    for (const fila of filas) {
+      await ejecutar(db, `INSERT INTO "${modelo.tabla}" (${columnas}) VALUES (${placeholders})`, fila);
+    }
+  }
+}
+
+async function reemplazarColeccion(db, clave, datos) {
+  const modelo = CATALOGO[clave];
+  if (!modelo) throw new Error("Colección desconocida: " + clave);
+  await ejecutar(db, "BEGIN");
+  try {
+    await fondoColeccion(db, modelo, datos || []);
+    await ejecutar(db, "COMMIT");
+  } catch (err) {
+    await ejecutar(db, "ROLLBACK");
+    throw err;
+  }
+}
+
+async function guardarConfig(db, config) {
+  await ejecutar(db, "BEGIN");
+  try {
+    await ejecutar(db, "DELETE FROM config");
+    const cfg = config || {};
+    for (const [clave, valor] of Object.entries(cfg)) {
+      await ejecutar(db, "INSERT INTO config (clave, valor) VALUES (?, ?)", [clave, JSON.stringify(valor)]);
+    }
+    await ejecutar(db, "COMMIT");
+  } catch (err) {
+    await ejecutar(db, "ROLLBACK");
+    throw err;
+  }
+}
+
 async function cargarTodo(db) {
   const salida = { config: {} };
   for (const [clave, modelo] of Object.entries(CATALOGO)) {
     const filas = await consultar(db, `SELECT * FROM "${modelo.tabla}"`);
     salida[clave] = filas.map(f => filaADato(modelo, f));
   }
-  const filasConfig = await consultar(db, "SELECT clave, valor FROM config");
-  for (const f of filasConfig) {
-    try {
-      salida.config[f.clave] = JSON.parse(f.valor);
-    } catch {
-      salida.config[f.clave] = f.valor;
-    }
-  }
+  salida.config = await cargarConfig(db);
   return salida;
 }
 
@@ -136,15 +194,7 @@ async function guardarTodo(db, datos) {
   await ejecutar(db, "BEGIN");
   try {
     for (const [clave, modelo] of Object.entries(CATALOGO)) {
-      const filas = (datos[clave] || []).map(d => datoAFila(modelo, d));
-      await ejecutar(db, `DELETE FROM "${modelo.tabla}"`);
-      if (filas.length) {
-        const columnas = modelo.campos.map(c => '"' + c + '"').join(", ");
-        const placeholders = modelo.campos.map(() => "?").join(", ");
-        for (const fila of filas) {
-          await ejecutar(db, `INSERT INTO "${modelo.tabla}" (${columnas}) VALUES (${placeholders})`, fila);
-        }
-      }
+      await fondoColeccion(db, modelo, datos[clave] || []);
     }
     await ejecutar(db, "DELETE FROM config");
     const config = datos.config || {};
@@ -163,5 +213,9 @@ module.exports = {
   inicializar,
   consultar,
   cargarTodo,
-  guardarTodo
+  guardarTodo,
+  cargarColeccion,
+  reemplazarColeccion,
+  cargarConfig,
+  guardarConfig
 };

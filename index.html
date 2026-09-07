@@ -343,12 +343,15 @@
         <div id="listaRegistros" class="list"></div>
       </div>
 
+      </section>
+
+    <section id="seccion-pacientes-eliminados" class="seccion">
       <div class="panel">
         <div class="panel-head">
           <h2>Pacientes eliminados</h2>
           <span class="tag" id="countEliminados">0</span>
         </div>
-        <p class="panel-sub">Al eliminar un paciente de la lista, su historial queda aquí. Solo podrás quitar estos datos definitivamente con tu contraseña.</p>
+        <p class="panel-sub">Aquí quedan los pacientes que eliminaste de la lista. Solo en esta sección puedes quitar estos datos definitivamente, y solo con tu contraseña de usuario. Al hacerlo se borran también todas sus citas, registros, documentos, facturas y recetas.</p>
         <div id="listaEliminados" class="list"></div>
       </div>
     </section>
@@ -404,6 +407,48 @@
       <div class="panel">
         <h2>Facturas emitidas</h2>
         <div id="listaFacturas" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-recetas" class="seccion">
+      <div class="panel">
+        <h2>Generar receta médica</h2>
+        <form id="recetaForm" class="form-grid">
+          <label class="form-full">Paciente
+            <select id="recetaPaciente" required></select>
+          </label>
+          <label>Edad
+            <input type="text" id="recetaEdad" placeholder="Se completa al elegir paciente" readonly />
+          </label>
+          <label>Fecha
+            <input type="date" id="recetaFecha" required />
+          </label>
+          <div class="form-full add-item-row">
+            <button type="button" id="btnAgregarMed" class="btn btn--primary">
+              <span class="material-symbols-outlined">add_circle</span>
+              Agregar medicamento
+            </button>
+            <span class="rec-hint">Cada fila lleva nombre, tipo (genérico/comercial), vía, dosis, frecuencia y duración.</span>
+          </div>
+          <div id="recetaMeds" class="form-full list"></div>
+          <div class="form-full add-item-row">
+            <button type="button" id="btnAgregarInd" class="btn btn--primary">
+              <span class="material-symbols-outlined">add_circle</span>
+              Agregar indicación / estudio
+            </button>
+            <span class="rec-hint">Imagen (radiografía/sonografía/RM/EMG), analíticas prequirúrgicas, evaluaciones y perfiles.</span>
+          </div>
+          <div id="recetaInds" class="form-full list"></div>
+          <button type="submit" class="btn btn--primary form-full">Guardar receta</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Recetas emitidas</h2>
+          <span class="tag" id="countRecetas">0</span>
+        </div>
+        <div id="listaRecetas" class="list"></div>
       </div>
     </section>
 
@@ -697,6 +742,22 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="modalReceta">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Receta médica</h3>
+        <button type="button" class="modal-close" data-cerrar="modalReceta" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div id="recetaVista"></div>
+      <div class="form-full modal-actions">
+        <button type="button" class="btn btn--ghost-dark" data-cerrar="modalReceta">Cerrar</button>
+        <button type="button" class="btn btn--primary" id="btnImprimirReceta">Imprimir receta</button>
+      </div>
+    </div>
+  </div>
+
   <button type="button" id="btnAyuda" class="help-fab hidden" title="Ayuda" hidden>
     <span class="material-symbols-outlined">help</span>
   </button>
@@ -724,6 +785,13 @@
           <div>
             <strong>Pacientes</strong>
             <p>Registra pacientes con código automático, edad, cédula y seguro. Puedes editar, ver la ficha o marcar para eliminar (borrado suave).</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">delete_forever</span>
+          <div>
+            <strong>Pacientes eliminados</strong>
+            <p>Reúne los pacientes que quitaste de la lista. Solo aquí puedes eliminarlos definitivamente ingresando tu contraseña; al hacerlo se borran también sus citas, registros, documentos, facturas y recetas.</p>
           </div>
         </div>
         <div class="help-card">
@@ -773,6 +841,13 @@
           <div>
             <strong>Facturación</strong>
             <p>Emite facturas seleccionando paciente y procedimientos (con precios base), calcula el total y las imprime por código.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">medication</span>
+          <div>
+            <strong>Recetas médicas</strong>
+            <p>Genera recetas con uno o varios medicamentos: tipo (genérico/comercial), vía (oral/tópica), dosis, frecuencia y duración del tratamiento. Guárdalas, revísalas e imprímelas.</p>
           </div>
         </div>
         <div class="help-card">
