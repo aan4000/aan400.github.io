@@ -14,45 +14,74 @@
       <li class="nav-item" data-seccion="inicio">
         <a href="#inicio">
           <span class="material-symbols-outlined format">home</span>
-          Inicio
+          <span class="nav-label">Inicio / Dashboard</span>
         </a>
       </li>
       <li class="nav-item" data-seccion="pacientes">
         <a href="#pacientes">
           <span class="material-symbols-outlined format">group</span>
-          Pacientes
+          <span class="nav-label">Pacientes</span>
         </a>
       </li>
-      <li class="nav-item" data-seccion="citas">
-        <a href="#citas">
-          <span class="material-symbols-outlined format">event</span>
-          Citas
+<li class="nav-item" data-seccion="citas">
+  <a href="#citas">
+    <span class="material-symbols-outlined format">event</span>
+    <span class="nav-label">Citas</span>
+    <span class="material-symbols-outlined nav-caret">expand_more</span>
+  </a>
+  <ul class="nav-sub">
+      <li class="nav-sub-item" data-seccion="citas-completadas">
+        <a href="#citas-completadas">
+          <span class="material-symbols-outlined format">task_alt</span>
+          <span class="nav-label">Citas completadas y diagnósticos</span>
         </a>
       </li>
+      <li class="nav-sub-item" data-seccion="citas-sin-consulta">
+        <a href="#citas-sin-consulta">
+          <span class="material-symbols-outlined format">pending_actions</span>
+          <span class="nav-label">Citas sin consulta</span>
+        </a>
+      </li>
+      <li class="nav-sub-item" data-seccion="pacientes-sin-cita">
+        <a href="#pacientes-sin-cita">
+          <span class="material-symbols-outlined format">person_off</span>
+          <span class="nav-label">Pacientes sin cita</span>
+        </a>
+      </li>
+    </ul>
+</li>
       <li class="nav-item" data-seccion="registros">
         <a href="#registros">
           <span class="material-symbols-outlined format">folder_open</span>
-          Registros
+          <span class="nav-label">Registros</span>
         </a>
       </li>
       <li class="nav-item" data-seccion="documentos">
         <a href="#documentos">
           <span class="material-symbols-outlined format">folder_managed</span>
-          Documentos
+          <span class="nav-label">Gestión de Documentos</span>
         </a>
       </li>
       <li class="nav-item" data-seccion="facturacion">
         <a href="#facturacion">
           <span class="material-symbols-outlined format">receipt_long</span>
-          Facturación
+          <span class="nav-label">Recibos / Facturación</span>
         </a>
       </li>
     </ul>
     <div class="sidebar-footer">
       <div class="user-chip">
-        <span class="material-symbols-outlined">account_circle</span>
+        <div class="avatar avatar--sidebar">
+          <img id="sidebarAvatar" alt="" hidden />
+          <span id="sidebarAvatarIcon" class="material-symbols-outlined avatar-fallback">account_circle</span>
+        </div>
         <span id="sidebarUserName">Usuario</span>
       </div>
+      <button type="button" id="btnFotoAccion" class="logout-btn foto-btn" title="Subir o remover foto de perfil">
+        <span class="material-symbols-outlined foto-btn-icon">add_a_photo</span>
+        <span class="foto-btn-text">Subir foto</span>
+      </button>
+      <input type="file" id="fotoInput" accept="image/*" hidden />
       <button id="logoutBtn" class="logout-btn">
         <span class="material-symbols-outlined">logout</span>
         Salir

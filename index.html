@@ -13,11 +13,34 @@
 
   <main class="app-main">
     <header class="topbar">
-      <h1 id="pageTitle">Inicio</h1>
-      <span id="todayDate" class="topbar-date"></span>
+      <h1 id="pageTitle">Inicio / Dashboard</h1>
+      <div class="topbar-right">
+        <span id="todayDate" class="topbar-date"></span>
+        <button id="btnAdmin" class="icon-btn hidden" title="Administración" hidden>
+          <span class="material-symbols-outlined">admin_panel_settings</span>
+        </button>
+        <button id="btnModoOscuro" class="icon-btn" data-toggle-dark title="Modo claro / oscuro">
+          <span class="material-symbols-outlined">dark_mode</span>
+        </button>
+      </div>
     </header>
 
     <section id="seccion-inicio" class="seccion active">
+      <div class="panel profile-panel">
+        <div class="profile-head">
+          <div class="avatar avatar--lg">
+            <img id="perfilAvatar" alt="" hidden />
+            <span id="perfilAvatarIcon" class="material-symbols-outlined avatar-fallback">account_circle</span>
+          </div>
+          <div class="profile-info">
+            <h2 id="perfilNombre">Usuario</h2>
+            <p id="perfilEmail">—</p>
+          </div>
+        </div>
+        <button type="button" id="btnAbrirStatsPanel" class="btn btn--primary btn-small">
+          <span class="material-symbols-outlined">monitoring</span> Pacientes atendidos
+        </button>
+      </div>
       <div class="stats">
         <div class="stat-card">
           <span class="material-symbols-outlined stat-icon">group</span>
@@ -67,6 +90,30 @@
         <h2>Próximas citas</h2>
         <div id="proximasCitas" class="list"></div>
       </div>
+
+      <div class="panel" id="dashPanelCompletadas">
+        <div class="panel-head">
+          <h2>Citas completadas y diagnóstico</h2>
+          <span class="tag" id="dashCountCompletadas">0</span>
+        </div>
+        <div id="dashCitasCompletadas" class="list"></div>
+      </div>
+
+      <div class="panel" id="dashPanelSinConsulta">
+        <div class="panel-head">
+          <h2>Citas sin consulta</h2>
+          <span class="tag" id="dashCountSinConsulta">0</span>
+        </div>
+        <div id="dashCitasSinConsulta" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Pacientes sin cita</h2>
+          <span class="tag" id="dashCountSinCita">0</span>
+        </div>
+        <div id="dashPacientesSinCita" class="list"></div>
+      </div>
     </section>
 
     <section id="seccion-pacientes" class="seccion">
@@ -105,7 +152,13 @@
             <input type="date" id="pacienteProxCitaFecha" />
           </label>
           <label>Próxima cita - hora
-            <input type="time" id="pacienteProxCitaHora" />
+            <div class="hora-wrap">
+              <input type="time" id="pacienteProxCitaHora" />
+              <select id="pacienteProxCitaAmPm">
+                <option value="AM">AM</option>
+                <option value="PM" selected>PM</option>
+              </select>
+            </div>
           </label>
           <label class="form-full">Notas
             <textarea id="pacienteNotas" rows="2" placeholder="Antecedentes, diagnóstico inicial..."></textarea>
@@ -153,6 +206,11 @@
     </section>
 
     <section id="seccion-citas" class="seccion">
+      <div class="section-toolbar">
+        <button type="button" id="btnCalendario" class="btn btn--ghost-dark">
+          <span class="material-symbols-outlined">calendar_month</span> Calendario
+        </button>
+      </div>
       <div class="panel">
         <h2>Nueva cita</h2>
         <form id="citaForm" class="form-grid">
@@ -163,7 +221,13 @@
             <input type="date" id="citaFecha" required />
           </label>
           <label>Hora
-            <input type="time" id="citaHora" required />
+            <div class="hora-wrap">
+              <input type="time" id="citaHora" required />
+              <select id="citaAmPm">
+                <option value="AM">AM</option>
+                <option value="PM" selected>PM</option>
+              </select>
+            </div>
           </label>
           <label>Motivo
             <input type="text" id="citaMotivo" placeholder="Motivo de la consulta" />
@@ -177,18 +241,63 @@
         <div class="panel-head">
           <h2>Lista de citas</h2>
           <div class="panel-actions">
-            <button type="button" id="btnWhatsappTurnos" class="btn btn--ghost-dark">
-              <span class="material-symbols-outlined">chat</span> WhatsApp
-            </button>
-            <button type="button" id="btnCorreoTurnos" class="btn btn--ghost-dark">
-              <span class="material-symbols-outlined">mail</span> Correo
-            </button>
-            <button type="button" id="btnImprimirTurnos" class="btn btn--ghost-dark">
-              <span class="material-symbols-outlined">print</span> Imprimir turnos
-            </button>
-          </div>
+          <button type="button" id="btnWhatsappTurnos" class="btn btn--ghost-dark">
+            <span class="material-symbols-outlined">chat</span> WhatsApp
+          </button>
+          <button type="button" id="btnCorreoTurnos" class="btn btn--ghost-dark">
+            <span class="material-symbols-outlined">mail</span> Correo
+          </button>
+          <button type="button" id="btnImprimirTurnos" class="btn btn--ghost-dark">
+            <span class="material-symbols-outlined">print</span> Imprimir turnos
+          </button>
+        </div>
         </div>
         <div id="listaCitas" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Pacientes en seguimiento</h2>
+          <span class="tag" id="countSeguimiento">0</span>
+        </div>
+        <div id="listaSeguimiento" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-citas-sin-consulta" class="seccion">
+      <div class="panel" id="panelCitasSinConsulta">
+        <div class="panel-head">
+          <h2>Citas sin consulta</h2>
+          <div class="panel-actions">
+            <button type="button" id="btnCitaSinConsulta" class="btn btn--ghost-dark">
+              <span class="material-symbols-outlined">add</span> Agregar
+            </button>
+            <span class="tag" id="countCitasSinConsulta">0</span>
+          </div>
+        </div>
+        <p class="panel-sub">Citas o casos que todavía no pasan a consulta. Agrégalos aquí y quedarán listados en esta sección.</p>
+        <div id="listaCitasSinConsulta" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-pacientes-sin-cita" class="seccion">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Pacientes sin cita</h2>
+          <span class="tag" id="countSinCitaCitas">0</span>
+        </div>
+        <div id="listaSinCitasCitas" class="list"></div>
+      </div>
+    </section>
+
+    <section id="seccion-citas-completadas" class="seccion">
+      <div class="panel" id="panelCitasCompletadas">
+        <div class="panel-head">
+          <h2>Citas completadas y diagnósticos</h2>
+          <span class="tag" id="countCitasCompletadas">0</span>
+        </div>
+        <p class="panel-sub">Citas que el doctor ya atendió. Se guardan con su diagnóstico y tratamiento.</p>
+        <div id="listaCitasCompletadas" class="list"></div>
       </div>
     </section>
 
@@ -204,6 +313,9 @@
           </label>
           <label class="form-full">Detalle
             <textarea id="registroDetalle" rows="3" placeholder="Descripción del registro..."></textarea>
+          </label>
+          <label class="form-full">Documento adjunto (opcional)
+            <input type="file" id="registroArchivo" accept=".pdf,image/*" />
           </label>
           <button type="submit" class="btn btn--primary form-full">Guardar registro</button>
         </form>
@@ -229,6 +341,15 @@
           <span class="material-symbols-outlined">search</span>
         </div>
         <div id="listaRegistros" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Pacientes eliminados</h2>
+          <span class="tag" id="countEliminados">0</span>
+        </div>
+        <p class="panel-sub">Al eliminar un paciente de la lista, su historial queda aquí. Solo podrás quitar estos datos definitivamente con tu contraseña.</p>
+        <div id="listaEliminados" class="list"></div>
       </div>
     </section>
 
@@ -285,7 +406,409 @@
         <div id="listaFacturas" class="list"></div>
       </div>
     </section>
+
+    <section id="seccion-admin" class="seccion">
+      <div class="panel">
+        <h2>Crear usuario</h2>
+        <form id="adminUserForm" class="form-grid">
+          <label>Nombre
+            <input type="text" id="auNombre" required placeholder="Nombre completo" />
+          </label>
+          <label>Correo electrónico
+            <input type="email" id="auEmail" required placeholder="usuario@clinica.com" />
+          </label>
+          <label>Contraseña
+            <input type="text" id="auPassword" required minlength="4" placeholder="Mínimo 4 caracteres" />
+          </label>
+          <label>Rol
+            <select id="auRol">
+              <option value="usuario">Usuario</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </label>
+          <button type="submit" class="btn btn--primary form-full">Crear usuario</button>
+          <p class="form-msg form-full" id="auMsg"></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Usuarios del sistema</h2>
+          <span class="tag" id="countUsuarios">0</span>
+        </div>
+        <p class="panel-sub">Cambia el rol de cada usuario, restablece su contraseña o elimínalo.</p>
+        <div id="listaUsuarios" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Opciones del sistema</h2>
+        </div>
+        <p class="panel-sub">Muestra u oculta secciones y funciones para todos los usuarios. Los cambios se aplican de inmediato.</p>
+        <div id="configOpciones" class="list"></div>
+        <div class="form-grid" id="configLimites">
+          <label>Límite de citas por día
+            <input type="number" id="cfgLimiteDia" min="1" />
+          </label>
+          <label>Límite de citas por semana
+            <input type="number" id="cfgLimiteSemana" min="1" />
+          </label>
+        </div>
+        <div class="form-full" style="margin-top:1em">
+          <button type="button" id="btnGuardarConfig" class="btn btn--primary">Guardar opciones</button>
+          <p class="form-msg" id="cfgMsg"></p>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <div class="modal-backdrop" id="modalAgendar">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Agendar cita rápida</h2>
+        <button type="button" class="modal-close" data-cerrar="modalAgendar" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p class="panel-sub" id="agendarPacienteNombre">—</p>
+      <form id="agendarForm" class="form-grid">
+        <label>Fecha
+          <input type="date" id="agendarFecha" required />
+        </label>
+        <label>Hora
+          <div class="hora-wrap">
+            <input type="time" id="agendarHora" required />
+            <select id="agendarAmPm">
+              <option value="AM">AM</option>
+              <option value="PM" selected>PM</option>
+            </select>
+          </div>
+        </label>
+        <label class="form-full">Motivo
+          <input type="text" id="agendarMotivo" placeholder="Motivo de la consulta" />
+        </label>
+        <p class="form-full limite-info" id="agendarLimiteInfo"></p>
+        <button type="submit" class="btn btn--primary form-full">Confirmar cita</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalCompletarCita">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Completar cita</h2>
+        <button type="button" class="modal-close" data-cerrar="modalCompletarCita" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p class="panel-sub" id="ccPacienteTexto">—</p>
+      <form id="completarCitaForm" class="form-grid">
+        <label class="form-full">Diagnóstico
+          <textarea id="ccDiagnostico" rows="3" placeholder="Diagnóstico de la consulta"></textarea>
+        </label>
+        <label class="form-full">Tratamiento / Notas
+          <textarea id="ccTratamiento" rows="3" placeholder="Tratamiento, indicaciones o notas"></textarea>
+        </label>
+        <button type="submit" class="btn btn--primary form-full">
+          <span class="material-symbols-outlined">check_circle</span> Guardar cita completada
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalStats">
+    <div class="modal-card modal-card--stats">
+      <div class="modal-head">
+        <h2>Estadísticas de pacientes atendidos</h2>
+        <button type="button" class="modal-close" data-cerrar="modalStats" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="form-grid">
+        <label>Desde
+          <input type="date" id="estDesde" />
+        </label>
+        <label>Hasta
+          <input type="date" id="estHasta" />
+        </label>
+        <div class="form-full add-item-row">
+          <button type="button" id="btnCalcularStats" class="btn btn--primary">
+            <span class="material-symbols-outlined">calculate</span> Calcular
+          </button>
+        </div>
+      </div>
+      <div id="estTotales" class="est-resumen"></div>
+      <div class="est-graficos">
+        <div id="estPeriodo" class="est-pie"></div>
+        <div id="estPie" class="est-pie"></div>
+      </div>
+      <p class="panel-sub" id="estRangoTexto"></p>
+      <div class="modal-actions">
+        <button type="button" id="btnImprimirStats" class="btn btn--primary">
+          <span class="material-symbols-outlined">print</span> Imprimir
+        </button>
+        <button type="button" id="btnExportarStats" class="btn btn--ghost-dark">
+          <span class="material-symbols-outlined">grid_on</span> Exportar Excel / Power BI
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalCalendario">
+    <div class="modal-card modal-card--cal">
+      <div class="modal-head">
+        <h2>Calendario de citas</h2>
+        <button type="button" class="modal-close" data-cerrar="modalCalendario" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="cal-toolbar">
+        <button type="button" id="calPrev" class="icon-btn" title="Mes anterior">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <h3 id="calTitulo"></h3>
+        <button type="button" id="calNext" class="icon-btn" title="Mes siguiente">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+
+      <div class="cal-grid" id="calGrid"></div>
+
+      <div id="calDetalle" class="list cal-detalle"></div>
+
+      <div id="calEditor" class="cal-editor">
+        <h3>Editar cita</h3>
+        <div class="form-grid">
+          <label>Fecha
+            <input type="date" id="calFecha" required />
+          </label>
+          <label>Hora
+            <div class="hora-wrap">
+              <input type="time" id="calHora" required />
+              <select id="calAmPm">
+                <option value="AM">AM</option>
+                <option value="PM" selected>PM</option>
+              </select>
+            </div>
+          </label>
+          <label class="form-full">Motivo
+            <input type="text" id="calMotivo" placeholder="Motivo de la consulta" />
+          </label>
+          <div class="form-full modal-actions">
+            <button type="button" id="btnCancelarCal" class="btn btn--ghost-dark">Cancelar</button>
+            <button type="button" id="btnGuardarCal" class="btn btn--primary">Guardar cambios</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalEditarRegistro">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Editar registro</h2>
+        <button type="button" class="modal-close" data-cerrar="modalEditarRegistro" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <form id="regEForm" class="form-grid">
+        <label class="form-full">Paciente
+          <select id="regEPaciente" required></select>
+        </label>
+        <label class="form-full">Título
+          <input type="text" id="regETitulo" required />
+        </label>
+        <label>Fecha
+          <input type="date" id="regEFecha" />
+        </label>
+        <label class="form-full">Detalle
+          <textarea id="regEDetalle" rows="3" placeholder="Descripción del registro..."></textarea>
+        </label>
+        <label class="form-full">Documento adjunto
+          <input type="file" id="regEArchivo" accept=".pdf,image/*" />
+          <span id="regEArchivoActual" class="reg-archivo-actual"></span>
+          <span class="reg-quitar">
+            <input type="checkbox" id="regEQuitarArchivo" /> Quitar documento actual
+          </span>
+        </label>
+        <div class="form-full modal-actions">
+          <button type="button" class="btn btn--ghost-dark" data-cerrar="modalEditarRegistro">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalConfirmarEliminacion">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Eliminar definitivamente</h3>
+        <button type="button" class="modal-close" data-cerrar="modalConfirmarEliminacion" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p id="confElimTexto" class="panel-sub"></p>
+      <form class="form-grid" onsubmit="return false;">
+        <label class="form-full">Contraseña de usuario
+          <input type="password" id="confPassword" placeholder="Escribe tu contraseña" autocomplete="current-password" />
+        </label>
+        <p id="confElimMsg" class="form-msg"></p>
+        <div class="form-full modal-actions">
+          <button type="button" class="btn btn--ghost-dark" data-cerrar="modalConfirmarEliminacion">Cancelar</button>
+          <button type="submit" class="btn btn--danger" id="btnConfEliminar">Eliminar definitivamente</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalCitaSinConsulta">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Agregar cita sin consulta</h3>
+        <button type="button" class="modal-close" data-cerrar="modalCitaSinConsulta" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <form id="citaSinConsultaForm" class="form-grid">
+        <label class="form-full">Paciente
+          <select id="cscPaciente" required></select>
+        </label>
+        <label>Fecha
+          <input type="date" id="cscFecha" required />
+        </label>
+        <label>Hora
+          <div class="hora-wrap">
+            <input type="time" id="cscHora" required />
+            <select id="cscAmPm">
+              <option value="AM">AM</option>
+              <option value="PM" selected>PM</option>
+            </select>
+          </div>
+        </label>
+        <label>Motivo
+          <input type="text" id="cscMotivo" placeholder="Motivo de la consulta" />
+        </label>
+        <div class="form-full modal-actions">
+          <button type="button" class="btn btn--ghost-dark" data-cerrar="modalCitaSinConsulta">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Agregar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <button type="button" id="btnAyuda" class="help-fab hidden" title="Ayuda" hidden>
+    <span class="material-symbols-outlined">help</span>
+  </button>
+
+  <div class="modal-backdrop" id="modalAyuda">
+    <div class="modal modal--help">
+      <div class="modal-head">
+        <h3>Ayuda del sistema</h3>
+        <button type="button" class="modal-close" data-cerrar="modalAyuda" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p class="panel-sub">Guía rápida de cada opción del sistema y cómo usarlas.</p>
+
+      <div class="help-grid">
+        <div class="help-card">
+          <span class="material-symbols-outlined">home</span>
+          <div>
+            <strong>Inicio / Dashboard</strong>
+            <p>Resumen con próximas citas, citas completadas y diagnóstico, citas sin consulta y pacientes sin cita. El botón "Pacientes atendidos" abre las estadísticas.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">group</span>
+          <div>
+            <strong>Pacientes</strong>
+            <p>Registra pacientes con código automático, edad, cédula y seguro. Puedes editar, ver la ficha o marcar para eliminar (borrado suave).</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">event</span>
+          <div>
+            <strong>Citas</strong>
+            <p>Agenda citas por paciente y turno, consulta la lista, envía avisos por WhatsApp o correo e imprime los turnos. Respeta los límites diario y semanal configurados.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">task_alt</span>
+          <div>
+            <strong>Citas completadas y diagnóstico</strong>
+            <p>Desde una cita pendiente puedes marcarla como completada y guardar el diagnóstico y tratamiento. Aquí se lista todo el historial: reabrir o eliminar una entrada.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">pending_actions</span>
+          <div>
+            <strong>Citas sin consulta</strong>
+            <p>Registra casos que aún no pasan a consulta con su fecha y motivo para que no se pierdan.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">person_off</span>
+          <div>
+            <strong>Pacientes sin cita</strong>
+            <p>Lista los pacientes activos que no tienen cita activa. Botón "Agendar cita" para agendarlos al momento.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">folder_open</span>
+          <div>
+            <strong>Registros</strong>
+            <p>Historial médico del paciente: título, descripción y documento adjunto (PDF o imagen). Admite editar, ver y adjuntar archivos.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">folder_managed</span>
+          <div>
+            <strong>Documentos</strong>
+            <p>Repositorio de archivos del sistema: subir, abrir, descargar y eliminar documentos.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">receipt_long</span>
+          <div>
+            <strong>Facturación</strong>
+            <p>Emite facturas seleccionando paciente y procedimientos (con precios base), calcula el total y las imprime por código.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">monitoring</span>
+          <div>
+            <strong>Estadísticas</strong>
+            <p>Rango de fechas con totales y gráficos de dona: citas por período y por día de la semana. Exporta e imprime el reporte.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">calendar_month</span>
+          <div>
+            <strong>Calendario</strong>
+            <p>Vista mensual de citas por día. Haz clic en un día para ver el detalle o editarlo. Navega con las flechas.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">admin_panel_settings</span>
+          <div>
+            <strong>Administración</strong>
+            <p>Solo visible para administradores: crea usuarios, asigna roles, configura las opciones del sistema (secciones y límites) y elimina definitivamente pacientes.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="help-tips">
+        <strong>Cómo usar el sistema</strong>
+        <ul>
+          <li>Todo lo que guardas se almacena automáticamente en la base de datos local (SQLite). No necesitas guardar manualmente.</li>
+          <li>El primer usuario registrado es el administrador; solo él ve el botón de administración y este botón de ayuda.</li>
+          <li>Usa "Modo claro / oscuro" (icono de luna) en la barra superior.</li>
+          <li>Cierra sesión desde el menú lateral. Los datos permanecen en el sistema.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 
   <div id="printArea"></div>
 

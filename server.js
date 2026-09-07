@@ -1,27 +1,56 @@
 const express = require("express");
-const sqlite = require("sqlite3");
-const path = require("path");
+const Base = require("./database");
 
 const app = express();
-const db = new sqlite.Database("./data.db", sqlite.OPEN_READWRITE, (err) => {
-  if (err) {
-    console.error("Error al abrir la base:", err.message);
-    process.exit(1);
-  }
-});
 
 app.use(express.static(__dirname));
+app.use(express.json({ limit: "50mb" }));
 
-app.get("/api/categoria", (req, res) => {
-  const id = req.query.id || 1;
-  db.get("SELECT * FROM Categories WHERE id = ?", [id], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(row || { error: "No se encontró la categoría" });
+Base.abrir()
+  .then(db => {
+    app.locals.db = db;
+    return Base.inicializar(db);
+  })
+  .then(() => {
+    app.get("/api/datos", async (req, res) => {
+      try {
+        res.json(await Base.cargarTodo(app.locals.db));
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/datos", async (req, res) => {
+      if (!req.body || typeof req.body !== "object") {
+        return res.status(400).json({ error: "Cuerpo inválido" });
+      }
+      try {
+        await Base.guardarTodo(app.locals.db, req.body);
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get("/api/categoria", async (req, res) => {
+      const id = req.query.id || 1;
+      try {
+        const filas = await Base.consultar(
+          app.locals.db,
+          "SELECT * FROM Categories WHERE id = ?",
+          [id]
+        );
+        res.json(filas[0] || { error: "No se encontró la categoría" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.listen(3000, () => {
+      console.log("Servidor en http://localhost:3000 (base local: data.db)");
+    });
+  })
+  .catch(err => {
+    console.error("Error al iniciar la base:", err.message);
+    process.exit(1);
   });
-});
-
-app.listen(3000, () => {
-  console.log("Servidor en http://localhost:3000");
-});
