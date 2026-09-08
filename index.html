@@ -148,18 +148,6 @@
           <label>Correo
             <input type="email" id="pacienteEmail" placeholder="Correo (opcional)" />
           </label>
-          <label>Próxima cita - fecha
-            <input type="date" id="pacienteProxCitaFecha" />
-          </label>
-          <label>Próxima cita - hora
-            <div class="hora-wrap">
-              <input type="time" id="pacienteProxCitaHora" />
-              <select id="pacienteProxCitaAmPm">
-                <option value="AM">AM</option>
-                <option value="PM" selected>PM</option>
-              </select>
-            </div>
-          </label>
           <label class="form-full">Notas
             <textarea id="pacienteNotas" rows="2" placeholder="Antecedentes, diagnóstico inicial..."></textarea>
           </label>
@@ -170,6 +158,10 @@
       <div class="panel">
         <div class="panel-head">
           <h2>Buscar paciente</h2>
+          <button type="button" id="btnMostrarEliminados" class="btn btn--ghost-dark btn-small" hidden>
+            <span class="material-symbols-outlined">visibility</span>
+            <span id="txtMostrarEliminados">Mostrar eliminados</span>
+          </button>
         </div>
         <div class="search-bar">
           <input type="text" id="buscarPaciente" placeholder="Buscar por nombre o código..." />
@@ -262,6 +254,15 @@
         </div>
         <div id="listaSeguimiento" class="list"></div>
       </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Citas canceladas</h2>
+          <span class="tag" id="countCitasCanceladas">0</span>
+        </div>
+        <p class="panel-sub">Citas que cancelaste. Puedes restaurarlas o eliminarlas.</p>
+        <div id="listaCitasCanceladas" class="list"></div>
+      </div>
     </section>
 
     <section id="seccion-citas-sin-consulta" class="seccion">
@@ -303,7 +304,7 @@
 
     <section id="seccion-registros" class="seccion">
       <div class="panel">
-        <h2>Nuevo registro</h2>
+        <h2>Nuevo registro clínico</h2>
         <form id="registroForm" class="form-grid">
           <label class="form-full">Paciente
             <select id="registroPaciente" required></select>
@@ -311,9 +312,29 @@
           <label class="form-full">Título
             <input type="text" id="registroTitulo" required placeholder="Ej: Consulta inicial" />
           </label>
+          <label class="form-full">Tipo
+            <select id="registroTipo">
+              <option value="Motivo de consulta">Motivo de consulta</option>
+              <option value="Examen físico">Examen físico</option>
+              <option value="Diagnóstico">Diagnóstico</option>
+            </select>
+          </label>
           <label class="form-full">Detalle
             <textarea id="registroDetalle" rows="3" placeholder="Descripción del registro..."></textarea>
           </label>
+          <label>Próxima cita - fecha
+            <input type="date" id="registroProxCitaFecha" />
+          </label>
+          <label>Próxima cita - hora
+            <div class="hora-wrap">
+              <input type="time" id="registroProxCitaHora" />
+              <select id="registroProxCitaAmPm">
+                <option value="AM">AM</option>
+                <option value="PM" selected>PM</option>
+              </select>
+            </div>
+          </label>
+          <span class="form-full rec-hint">Si indicas una próxima cita, se agenda automáticamente en Citas.</span>
           <label class="form-full">Documento adjunto (opcional)
             <input type="file" id="registroArchivo" accept=".pdf,image/*" />
           </label>
@@ -323,7 +344,7 @@
 
       <div class="panel">
         <div class="panel-head">
-          <h2>Registros guardados</h2>
+          <h2>Historial clínico</h2>
           <div class="panel-actions">
             <button type="button" id="btnWhatsappResultados" class="btn btn--ghost-dark">
               <span class="material-symbols-outlined">chat</span> WhatsApp
@@ -345,14 +366,60 @@
 
       </section>
 
-    <section id="seccion-pacientes-eliminados" class="seccion">
-      <div class="panel">
-        <div class="panel-head">
-          <h2>Pacientes eliminados</h2>
-          <span class="tag" id="countEliminados">0</span>
+    <section id="seccion-evaluacion-fisica" class="seccion">
+      <div class="eval-layout">
+        <div class="eval-svg-wrap">
+          <span class="eval-svg-caption">Haz clic sobre las zonas del cuerpo para marcarlas con el color del tipo de lesión</span>
+          <div class="eval-indiv" id="svgMasculino">
+            <img id="evalImgMasculino" class="eval-img" alt="Figura masculina" src="evaluacion_M.png" />
+            <svg id="svgZonasMasculino" class="eval-hitlayer" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"></svg>
+          </div>
+          <div class="eval-indiv" id="svgFemenino" hidden>
+            <img id="evalImgFemenino" class="eval-img" alt="Figura femenina" src="evaluacion_f.png" />
+            <svg id="svgZonasFemenino" class="eval-hitlayer" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"></svg>
+          </div>
         </div>
-        <p class="panel-sub">Aquí quedan los pacientes que eliminaste de la lista. Solo en esta sección puedes quitar estos datos definitivamente, y solo con tu contraseña de usuario. Al hacerlo se borran también todas sus citas, registros, documentos, facturas y recetas.</p>
-        <div id="listaEliminados" class="list"></div>
+
+        <div class="eval-panel">
+          <h3>Paciente</h3>
+          <select id="evalPaciente">
+            <option value="">— Selecciona un paciente —</option>
+          </select>
+
+          <h3>Sexo del paciente</h3>
+          <div class="eval-sexo-btns">
+            <button type="button" class="btn eval-sexo active" id="btnEvalMasculino">
+              <span class="material-symbols-outlined">male</span> Masculino
+            </button>
+            <button type="button" class="btn eval-sexo" id="btnEvalFemenino">
+              <span class="material-symbols-outlined">female</span> Femenino
+            </button>
+          </div>
+
+          <h3>Tipo de lesión</h3>
+          <div id="lesionTipos" class="eval-tipos"></div>
+          <button type="button" class="btn btn--ghost-dark btn-small" id="btnEvalBorrador">
+            <span class="material-symbols-outlined">ink_eraser</span> Borrador
+          </button>
+
+          <h3>Partes afectadas (<span id="evalContador">0</span>)</h3>
+          <div id="partesAfectadas" class="eval-partes"></div>
+
+          <h3>Nota de la evaluación</h3>
+          <textarea id="evalNota" rows="4" placeholder="Observaciones, hallazgos, sugerencias…"></textarea>
+
+          <div class="eval-acciones">
+            <button type="button" class="btn btn--primary" id="btnEvalGuardar">
+              <span class="material-symbols-outlined">save</span> Guardar resultado
+            </button>
+            <button type="button" class="btn btn--ghost-dark btn-small" id="btnEvalLimpiar">
+              <span class="material-symbols-outlined">restart_alt</span> Limpiar todo
+            </button>
+          </div>
+
+          <h3>Resultados guardados</h3>
+          <div id="evalGuardados" class="eval-partes"></div>
+        </div>
       </div>
     </section>
 
@@ -498,6 +565,13 @@
           <label>Límite de citas por semana
             <input type="number" id="cfgLimiteSemana" min="1" />
           </label>
+          <label class="form-full">Color de los botones
+            <select id="cfgColorBotones">
+              <option value="actual">Color actual</option>
+              <option value="azul">Azul</option>
+              <option value="verde">Verde</option>
+            </select>
+          </label>
         </div>
         <div class="form-full" style="margin-top:1em">
           <button type="button" id="btnGuardarConfig" class="btn btn--primary">Guardar opciones</button>
@@ -583,6 +657,7 @@
         </div>
       </div>
       <div id="estTotales" class="est-resumen"></div>
+      <div id="estLineas"></div>
       <div class="est-graficos">
         <div id="estPeriodo" class="est-pie"></div>
         <div id="estPie" class="est-pie"></div>
@@ -664,6 +739,13 @@
         <label class="form-full">Título
           <input type="text" id="regETitulo" required />
         </label>
+        <label class="form-full">Tipo
+          <select id="regETipo">
+            <option value="Motivo de consulta">Motivo de consulta</option>
+            <option value="Examen físico">Examen físico</option>
+            <option value="Diagnóstico">Diagnóstico</option>
+          </select>
+        </label>
         <label>Fecha
           <input type="date" id="regEFecha" />
         </label>
@@ -688,7 +770,7 @@
   <div class="modal-backdrop" id="modalConfirmarEliminacion">
     <div class="modal">
       <div class="modal-head">
-        <h3>Eliminar definitivamente</h3>
+        <h3 id="confElimTitulo">Confirmar con contraseña</h3>
         <button type="button" class="modal-close" data-cerrar="modalConfirmarEliminacion" title="Cerrar">
           <span class="material-symbols-outlined">close</span>
         </button>
@@ -701,7 +783,7 @@
         <p id="confElimMsg" class="form-msg"></p>
         <div class="form-full modal-actions">
           <button type="button" class="btn btn--ghost-dark" data-cerrar="modalConfirmarEliminacion">Cancelar</button>
-          <button type="submit" class="btn btn--danger" id="btnConfEliminar">Eliminar definitivamente</button>
+          <button type="submit" class="btn btn--danger" id="btnConfEliminar">Confirmar</button>
         </div>
       </form>
     </div>
@@ -742,6 +824,38 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="modalEditarFactura">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="edFactTitulo">Editar factura</h3>
+        <button type="button" class="modal-close" data-cerrar="modalEditarFactura" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <form class="form-grid" onsubmit="return false;">
+        <label class="form-full">Paciente
+          <input type="text" id="edFactPaciente" readonly />
+        </label>
+        <label class="form-full">Procedimientos
+          <div id="edFactItems" class="list"></div>
+        </label>
+        <label class="form-full">Porcentaje de honorarios del doctor (%)
+          <input type="number" id="edFactPorcentaje" min="0" max="100" />
+        </label>
+        <div class="form-full resumen" id="edFactResumen">
+          <p>Subtotal: <strong id="edResumenSubtotal">$0.00</strong></p>
+          <p>Honorarios del doctor: <strong id="edResumenHonorarios">$0.00</strong></p>
+          <p>Neto clínica: <strong id="edResumenNeto">$0.00</strong></p>
+          <p class="total">Total a pagar: <strong id="edResumenTotal">$0.00</strong></p>
+        </div>
+        <div class="form-full modal-actions">
+          <button type="button" class="btn btn--ghost-dark" data-cerrar="modalEditarFactura">Cancelar</button>
+          <button type="submit" class="btn btn--primary">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="modalReceta">
     <div class="modal">
       <div class="modal-head">
@@ -761,6 +875,54 @@
   <button type="button" id="btnAyuda" class="help-fab hidden" title="Ayuda" hidden>
     <span class="material-symbols-outlined">help</span>
   </button>
+
+  <div class="modal-backdrop" id="modalEvalExtremidad">
+    <div class="modal modal--extrem">
+      <div class="modal-head">
+        <h3 id="evalExtremTitulo">Mano</h3>
+        <button type="button" class="modal-close" data-cerrar="modalEvalExtremidad" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="eval-extrem-layout">
+        <div class="eval-extrem-svg" id="evalExtremSvg"></div>
+        <div class="eval-extrem-panel">
+          <h4>Tipo de lesión</h4>
+          <div id="lesionChipsExtrem" class="eval-tipos"></div>
+          <button type="button" class="btn btn--ghost-dark btn-small" id="btnEvalExtremBorrador">
+            <span class="material-symbols-outlined">ink_eraser</span> Borrador
+          </button>
+          <h4>Marcadas en esta extremidad (<span id="evalExtremContador">0</span>)</h4>
+          <div id="evalExtremPartes" class="eval-partes"></div>
+          <div class="eval-acciones eval-acciones--row">
+            <button type="button" class="btn btn--ghost-dark btn-small" id="btnEvalExtremTodo">
+              <span class="material-symbols-outlined">colorize</span> Marcar extremidad completa
+            </button>
+            <button type="button" class="btn btn--ghost-dark btn-small" id="btnEvalExtremLimpiar">
+              <span class="material-symbols-outlined">cleaning_services</span> Limpiar extremidad
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalEvalResultado">
+    <div class="modal modal--eval-result">
+      <div class="modal-head">
+        <h3>Evaluación física · <span id="evalResultadoTitulo"></span></h3>
+        <button type="button" class="modal-close" data-cerrar="modalEvalResultado" title="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="eval-resultado">
+        <img id="evalResultadoImg" class="eval-resultado-img" alt="Resultado de la evaluación física" />
+        <div id="evalResultadoLeyenda" class="eval-resultado-leyenda"></div>
+        <h4>Descripción</h4>
+        <p id="evalResultadoNota" class="eval-resultado-nota"></p>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-backdrop" id="modalAyuda">
     <div class="modal modal--help">
@@ -791,7 +953,7 @@
           <span class="material-symbols-outlined">delete_forever</span>
           <div>
             <strong>Pacientes eliminados</strong>
-            <p>Reúne los pacientes que quitaste de la lista. Solo aquí puedes eliminarlos definitivamente ingresando tu contraseña; al hacerlo se borran también sus citas, registros, documentos, facturas y recetas.</p>
+            <p>Solo los administradores pueden quitar un paciente de la lista (con su contraseña). En Pacientes, el botón "Mostrar eliminados" (visible solo para administradores) muestra los pacientes eliminados y permite restablecerlos o eliminarlos por completo; ambas acciones requieren la contraseña del usuario. Al borrarlos por completo se eliminan también sus citas, registros, documentos, facturas y recetas.</p>
           </div>
         </div>
         <div class="help-card">
@@ -825,8 +987,8 @@
         <div class="help-card">
           <span class="material-symbols-outlined">folder_open</span>
           <div>
-            <strong>Registros</strong>
-            <p>Historial médico del paciente: título, descripción y documento adjunto (PDF o imagen). Admite editar, ver y adjuntar archivos.</p>
+            <strong>Historial clínico</strong>
+            <p>Historial médico del paciente: elige el tipo (motivo de consulta, examen físico o diagnóstico), escribe el detalle, agenda la próxima cita y hora, y adjunta documentos (PDF o imagen).</p>
           </div>
         </div>
         <div class="help-card">
@@ -848,6 +1010,13 @@
           <div>
             <strong>Recetas médicas</strong>
             <p>Genera recetas con uno o varios medicamentos: tipo (genérico/comercial), vía (oral/tópica), dosis, frecuencia y duración del tratamiento. Guárdalas, revísalas e imprímelas.</p>
+          </div>
+        </div>
+        <div class="help-card">
+          <span class="material-symbols-outlined">accessibility_new</span>
+          <div>
+            <strong>Evaluación física</strong>
+            <p>Elige el sexo del paciente en la figura anatómica, selecciona un tipo de lesión (color) y haz clic sobre las zonas del cuerpo para marcarlas. Al hacer clic en una mano o un pie se abre un detalle para seleccionar dedos, manos o plantas de forma individual. Puedes escribir una nota, elegir un paciente y guardar el resultado para revisarlo o cargarlo después.</p>
           </div>
         </div>
         <div class="help-card">

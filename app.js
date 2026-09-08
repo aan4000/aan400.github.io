@@ -6,7 +6,8 @@ const MODELOS = {
   orto_documentos: "documentos",
   orto_facturas: "facturas",
   orto_citas_sin_consulta: "citasSinConsulta",
-  orto_recetas: "recetas"
+  orto_recetas: "recetas",
+  orto_evaluaciones: "evaluaciones"
 };
 
 const traductorModelo = {
@@ -17,7 +18,8 @@ const traductorModelo = {
   documentos: "documentos",
   facturas: "facturas",
   citasSinConsulta: "citasSinConsulta",
-  recetas: "recetas"
+  recetas: "recetas",
+  evaluaciones: "evaluaciones"
 };
 
 const BD = (() => {
@@ -30,7 +32,8 @@ const BD = (() => {
       documentos: [],
       facturas: [],
       citasSinConsulta: [],
-      recetas: []
+      recetas: [],
+      evaluaciones: []
     },
     config: {}
   };
@@ -143,6 +146,7 @@ const BD = (() => {
     State.facturas = cache.colecciones.facturas;
     State.citasSinConsulta = cache.colecciones.citasSinConsulta;
     State.recetas = cache.colecciones.recetas;
+    State.evaluaciones = cache.colecciones.evaluaciones;
     State.config = cache.config["orto_config"] ?? null;
     State.session = cache.config["orto_session"] ?? null;
   }
@@ -157,6 +161,7 @@ const BD = (() => {
       facturas: cache.colecciones.facturas,
       citasSinConsulta: cache.colecciones.citasSinConsulta,
       recetas: cache.colecciones.recetas,
+      evaluaciones: cache.colecciones.evaluaciones,
       config: cache.config
     };
   }
@@ -280,6 +285,7 @@ const State = {
   facturas: [],
   citasSinConsulta: [],
   recetas: [],
+  evaluaciones: [],
   config: null
 };
 
@@ -312,7 +318,7 @@ const CONFIG_DEFECTO = {
   seccionRegistros: true,
   seccionCitas: true,
   seccionRecetas: true,
-  seccionPacientesEliminados: true,
+  seccionEvaluacionFisica: true,
   seccionPacientes: true,
   estadisticas: true,
   calendario: true,
@@ -320,6 +326,7 @@ const CONFIG_DEFECTO = {
   modoOscuro: true,
   recuperarContrasena: true,
   registroPublico: true,
+  colorBotones: "actual",
   limiteDiaCitas: 30,
   limiteSemanaCitas: 150
 };
@@ -369,7 +376,7 @@ function migrateOnLoad() {
 }
 
 function citasEnDia(fecha) {
-  return State.citas.filter(c => c.fecha === fecha && !c.completada).length;
+  return State.citas.filter(c => c.fecha === fecha && !c.completada && !c.cancelada).length;
 }
 
 function inicioSemana(fechaStr) {
@@ -384,7 +391,7 @@ function citasEnSemana(fechaStr) {
   const fin = new Date(inicio + "T00:00:00");
   fin.setDate(fin.getDate() + 6);
   const finISO = fin.toISOString().split("T")[0];
-  return State.citas.filter(c => c.fecha >= inicio && c.fecha <= finISO && !c.completada).length;
+  return State.citas.filter(c => c.fecha >= inicio && c.fecha <= finISO && !c.completada && !c.cancelada).length;
 }
 
 function validarLimiteCitas(fecha) {
@@ -540,17 +547,9 @@ function actualizarAccesosAdmin() {
     btnAyuda.hidden = !admin;
     btnAyuda.classList.toggle("hidden", !admin);
   }
-  const subElim = document.querySelector('.nav-sub-item[data-seccion="pacientes-eliminados"]');
-  if (subElim) subElim.classList.toggle("hidden", !admin);
-  const regItem = document.querySelector('.nav-item[data-seccion="registros"]');
-  if (regItem) {
-    const caret = regItem.querySelector(".nav-caret");
-    const sub = regItem.querySelector(".nav-sub");
-    if (!admin) {
-      if (caret) caret.remove();
-      if (sub) sub.remove();
-    }
-  }
+  const btnMostrarElim = document.getElementById("btnMostrarEliminados");
+  if (btnMostrarElim) btnMostrarElim.classList.toggle("hidden", !admin);
+  if (!admin) mostrarEliminados = false;
 }
 
 function abrirAdmin() {
@@ -683,12 +682,12 @@ function crearUsuarioAdmin(e) {
 
 const OPCIONES_SISTEMA = [
   ["seccionPacientes", "Mostrar sección Pacientes"],
-  ["seccionPacientesEliminados", "Mostrar sección Pacientes eliminados"],
   ["seccionCitas", "Mostrar sección Citas"],
   ["seccionRecetas", "Mostrar sección Recetas médicas"],
-  ["seccionRegistros", "Mostrar sección Registros"],
+  ["seccionRegistros", "Mostrar sección Historial clínico"],
   ["seccionDocumentos", "Mostrar sección Documentos"],
   ["seccionFacturacion", "Mostrar sección Facturación"],
+  ["seccionEvaluacionFisica", "Mostrar sección Evaluación física"],
   ["estadisticas", "Mostrar estadísticas (Pacientes atendidos)"],
   ["calendario", "Mostrar calendario de citas"],
   ["citasSinConsulta", "Mostrar panel de citas sin consulta"],
@@ -712,6 +711,8 @@ function cargarOpcionesConfig() {
   const limS = document.getElementById("cfgLimiteSemana");
   if (limD) limD.value = cfg.limiteDiaCitas;
   if (limS) limS.value = cfg.limiteSemanaCitas;
+  const colorEl = document.getElementById("cfgColorBotones");
+  if (colorEl) colorEl.value = cfg.colorBotones || "actual";
 }
 
 function guardarConfig() {
@@ -723,6 +724,8 @@ function guardarConfig() {
   const limS = document.getElementById("cfgLimiteSemana");
   if (limD && Number(limD.value) >= 1) cfg.limiteDiaCitas = Number(limD.value);
   if (limS && Number(limS.value) >= 1) cfg.limiteSemanaCitas = Number(limS.value);
+  const colorEl = document.getElementById("cfgColorBotones");
+  if (colorEl) cfg.colorBotones = colorEl.value;
   State.config = cfg;
   saveKey("config");
   aplicarConfig();
@@ -735,12 +738,20 @@ function guardarConfig() {
   }
 }
 
+function aplicarColorBotones(color) {
+  const valor = color || "actual";
+  document.body.classList.toggle("color-botones-azul", valor === "azul");
+  document.body.classList.toggle("color-botones-verde", valor === "verde");
+}
+
 function aplicarConfig() {
   const cfg = configuracion();
+  aplicarColorBotones(cfg.colorBotones);
   const navMap = {
     pacientes: "seccionPacientes",
     citas: "seccionCitas",
     recetas: "seccionRecetas",
+    "evaluacion-fisica": "seccionEvaluacionFisica",
     registros: "seccionRegistros",
     documentos: "seccionDocumentos",
     facturacion: "seccionFacturacion"
@@ -764,11 +775,6 @@ function aplicarConfig() {
   if (subSinConsulta) subSinConsulta.classList.toggle("hidden", cfg.citasSinConsulta === false);
   const secSinConsulta = document.getElementById("seccion-citas-sin-consulta");
   if (cfg.citasSinConsulta === false && secSinConsulta && secSinConsulta.classList.contains("active")) mostrarSeccion("inicio");
-
-  const subEliminados = document.querySelector('.nav-sub-item[data-seccion="pacientes-eliminados"]');
-  if (subEliminados) subEliminados.classList.toggle("hidden", cfg.seccionPacientesEliminados === false);
-  const secEliminados = document.getElementById("seccion-pacientes-eliminados");
-  if (cfg.seccionPacientesEliminados === false && secEliminados && secEliminados.classList.contains("active")) mostrarSeccion("inicio");
 
   const porId = {
     btnAbrirStatsPanel: "estadisticas",
@@ -846,53 +852,86 @@ function genCodigoPaciente() {
   return prefix + "-" + num;
 }
 
+let mostrarEliminados = false;
+
 function renderPacientes(filtro = "") {
   const lista = document.getElementById("listaPacientes");
   if (!lista) return;
 
   const q = filtro.trim().toLowerCase();
-  const data = pacientesActivos().filter(p => {
-    if (!q) return true;
-    return (
-      p.nombre.toLowerCase().includes(q) ||
-      p.codigo.toLowerCase().includes(q) ||
-      (p.telefono || "").toLowerCase().includes(q)
-    );
-  });
+  const base = mostrarEliminados ? State.pacientes : pacientesActivos();
+  const data = base
+    .filter(p => {
+      if (!q) return true;
+      return (
+        p.nombre.toLowerCase().includes(q) ||
+        p.codigo.toLowerCase().includes(q) ||
+        (p.telefono || "").toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (mostrarEliminados) return String(b.fechaEliminado || "").localeCompare(String(a.fechaEliminado || ""));
+      return 0;
+    });
 
   if (data.length === 0) {
-    lista.innerHTML = `<p class="empty">No se encontraron pacientes.</p>`;
+    lista.innerHTML = mostrarEliminados
+      ? `<p class="empty">No hay pacientes eliminados.</p>`
+      : `<p class="empty">No se encontraron pacientes.</p>`;
     return;
   }
 
-  lista.innerHTML = data.map(p => `
+  lista.innerHTML = data.map(p => {
+    const eliminado = !!p.eliminado;
+    return `
     <div class="list-item" data-id="${p.id}">
       <div class="item-main">
         <strong>${p.nombre}</strong>
         <span class="tag">${p.codigo}</span>
-        ${p.cedula ? `<span class="tag">Cédula: ${p.cedula}</span>` : ""}
+        ${eliminado ? `<span class="tag tag-elim">Eliminado ${p.fechaEliminado || ""}</span>` : p.cedula ? `<span class="tag">Cédula: ${p.cedula}</span>` : ""}
       </div>
       <div class="item-sub">Edad: ${p.edad || "-"} · Sexo: ${p.sexo || "-"} · Seguro: ${p.seguro || "-"} · Tel: ${p.telefono || "-"}</div>
       <div class="item-actions">
         <button class="btn-icon" data-ver="${p.id}" title="Ver ficha">
           <span class="material-symbols-outlined">visibility</span>
         </button>
+        ${eliminado && mostrarEliminados ? `
+        <button class="btn-icon" data-restablecer="${p.id}" title="Restablecer paciente">
+          <span class="material-symbols-outlined">restore</span>
+        </button>
+        <button class="btn-icon danger" data-borrar-def="${p.id}" title="Eliminar por completo">
+          <span class="material-symbols-outlined">delete_forever</span>
+        </button>` : `
         <button class="btn-icon danger" data-borrar="${p.id}" title="Eliminar">
           <span class="material-symbols-outlined">delete</span>
-        </button>
+        </button>`}
       </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
 
   lista.querySelectorAll("[data-ver]").forEach(b =>
     b.addEventListener("click", () => verPaciente(Number(b.dataset.ver)))
   );
   lista.querySelectorAll("[data-borrar]").forEach(b =>
-    b.addEventListener("click", () => borrarPaciente(Number(b.dataset.borrar)))
+    b.addEventListener("click", () => pedirBorrarPaciente(Number(b.dataset.borrar)))
+  );
+  lista.querySelectorAll("[data-restablecer]").forEach(b =>
+    b.addEventListener("click", () => pedirReactivarPaciente(Number(b.dataset.restablecer)))
+  );
+  lista.querySelectorAll("[data-borrar-def]").forEach(b =>
+    b.addEventListener("click", () => pedirEliminacionDefinitiva(Number(b.dataset.borrarDef)))
   );
 
   renderPacientesSinCita();
   renderCitasAux();
+}
+
+function toggleMostrarEliminados() {
+  mostrarEliminados = !mostrarEliminados;
+  const txt = document.getElementById("txtMostrarEliminados");
+  if (txt) txt.textContent = mostrarEliminados ? "Ocultar eliminados" : "Mostrar eliminados";
+  renderPacientes(document.getElementById("buscarPaciente").value);
 }
 
 let pacienteActual = null;
@@ -902,7 +941,7 @@ function renderPacientesSinCita() {
   const countEl = document.getElementById("countSinCita");
   if (!lista) return;
 
-  const sinCita = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada));
+  const sinCita = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada && !c.cancelada));
   if (countEl) countEl.textContent = sinCita.length;
 
   if (sinCita.length === 0) {
@@ -997,7 +1036,7 @@ function renderCitasAux() {
   const listaSeg = document.getElementById("listaSeguimiento");
   const countSeg = document.getElementById("countSeguimiento");
 
-  const sinCita = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada));
+  const sinCita = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada && !c.cancelada));
   if (countSin) countSin.textContent = sinCita.length;
 
   if (listaSin) {
@@ -1027,7 +1066,7 @@ function renderCitasAux() {
   const hoy = new Date().toISOString().split("T")[0];
   const enSeguimiento = pacientesActivos().filter(p => {
     const tieneRegistros = State.registros.some(r => r.pacienteId === p.id);
-    const tieneProximaCita = State.citas.some(c => c.pacienteId === p.id && c.fecha >= hoy && !c.completada);
+    const tieneProximaCita = State.citas.some(c => c.pacienteId === p.id && c.fecha >= hoy && !c.completada && !c.cancelada);
     return tieneRegistros || tieneProximaCita;
   });
   if (countSeg) countSeg.textContent = enSeguimiento.length;
@@ -1039,7 +1078,7 @@ function renderCitasAux() {
       listaSeg.innerHTML = enSeguimiento.map(p => {
         const nRegistros = State.registros.filter(r => r.pacienteId === p.id).length;
         const prox = State.citas
-          .filter(c => c.pacienteId === p.id && c.fecha >= hoy && !c.completada)
+          .filter(c => c.pacienteId === p.id && c.fecha >= hoy && !c.completada && !c.cancelada)
           .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora))[0];
         return `
           <div class="list-item">
@@ -1149,16 +1188,59 @@ function imprimirFichaPaciente(id) {
   `);
 }
 
-function borrarPaciente(id) {
+let pendienteBorrarPac = null;
+let pendienteEliminarDef = null;
+let pendienteReactivarPac = null;
+
+function pedirBorrarPaciente(id) {
   const p = State.pacientes.find(x => x.id === id);
   if (!p) return;
-  if (!confirm(`¿Eliminar a "${p.nombre}" de la lista de pacientes?\n\nSus registros se conservarán en la sección Registros. Podrás eliminarlos definitivamente desde ahí con tu contraseña.`)) return;
+  pendienteBorrarPac = id;
+  const titulo = document.getElementById("confElimTitulo");
+  if (titulo) titulo.textContent = "Eliminar paciente";
+  const btn = document.getElementById("btnConfEliminar");
+  if (btn) btn.textContent = "Eliminar paciente";
+  const pass = document.getElementById("confPassword");
+  if (pass) pass.value = "";
+  const msg = document.getElementById("confElimMsg");
+  if (msg) {
+    msg.textContent = "";
+    msg.className = "form-msg";
+  }
+  const texto = document.getElementById("confElimTexto");
+  if (texto) texto.textContent = `Se eliminará a "${p.nombre}" (${p.codigo}) de la lista de pacientes. Sus registros se conservan en el historial clínico. Introduce tu contraseña de usuario para confirmar.`;
+  abrirModal("modalConfirmarEliminacion");
+  if (pass) setTimeout(() => pass.focus(), 50);
+}
+
+function confirmarBorrarPaciente() {
+  if (pendienteBorrarPac === null) return;
+  const id = pendienteBorrarPac;
+  const p = State.pacientes.find(x => x.id === id);
+  const pass = document.getElementById("confPassword");
+  const passVal = pass ? pass.value : "";
+  const user = State.users.find(u => u.id === (State.session && State.session.id));
+  const msg = document.getElementById("confElimMsg");
+  const ok = user && user.password === passVal;
+  if (msg) {
+    if (!ok) {
+      msg.textContent = "Contraseña incorrecta. Introduce tu contraseña de usuario.";
+      msg.className = "form-msg error";
+      if (pass) { pass.value = ""; setTimeout(() => pass.focus(), 50); }
+      return;
+    }
+    msg.textContent = "";
+    msg.className = "form-msg";
+  }
+  if (!p) { pendienteBorrarPac = null; cerrarModales(); return; }
   p.eliminado = true;
   p.fechaEliminado = isoLocal(new Date());
   const hoy = isoLocal(new Date());
   State.citas = State.citas.filter(c => c.pacienteId !== id || c.fecha < hoy);
   saveKey("pacientes");
   saveKey("citas");
+  pendienteBorrarPac = null;
+  cerrarModales();
   renderPacientes(document.getElementById("buscarPaciente").value);
   renderCitas();
   renderDocumentos();
@@ -1166,55 +1248,81 @@ function borrarPaciente(id) {
   renderRecetas();
   renderRegistros();
   renderCitasAux();
-  renderPacientesEliminados();
   renderHome();
 }
 
-function renderPacientesEliminados() {
-  const lista = document.getElementById("listaEliminados");
-  const countEl = document.getElementById("countEliminados");
-  if (!lista) return;
-
-  const eliminados = State.pacientes.filter(p => p.eliminado);
-  if (countEl) countEl.textContent = eliminados.length;
-
-  if (eliminados.length === 0) {
-    lista.innerHTML = `<p class="empty">No hay pacientes eliminados. Cuando elimines un paciente de la sección Pacientes, aparecerá aquí para quitar sus datos definitivamente con tu contraseña.</p>`;
-    return;
+function pedirReactivarPaciente(id) {
+  if (!esAdmin()) return;
+  const p = State.pacientes.find(x => x.id === id);
+  if (!p) return;
+  pendienteReactivarPac = id;
+  const titulo = document.getElementById("confElimTitulo");
+  if (titulo) titulo.textContent = "Restablecer paciente";
+  const btn = document.getElementById("btnConfEliminar");
+  if (btn) btn.textContent = "Restablecer paciente";
+  const pass = document.getElementById("confPassword");
+  if (pass) pass.value = "";
+  const msg = document.getElementById("confElimMsg");
+  if (msg) {
+    msg.textContent = "";
+    msg.className = "form-msg";
   }
-
-  lista.innerHTML = eliminados.map(p => {
-    const nRegistros = State.registros.filter(r => r.pacienteId === p.id).length;
-    const nDoc = State.documentos.filter(d => d.pacienteId === p.id).length;
-    const nFact = State.facturas.filter(f => f.pacienteId === p.id).length;
-    return `
-      <div class="list-item">
-        <div class="item-main">
-          <strong>${p.nombre}</strong>
-          <span class="tag">${p.codigo}</span>
-          <span class="tag tag-elim">Eliminado</span>
-        </div>
-        <div class="item-sub">Eliminado el ${p.fechaEliminado || "-"} · ${nRegistros} registros · ${nDoc} documentos · ${nFact} facturas</div>
-        <div class="item-actions">
-          <button class="btn btn--ghost-dark btn-small" data-borrar-def="${p.id}">
-            <span class="material-symbols-outlined">delete_forever</span> Eliminar definitivamente
-          </button>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  lista.querySelectorAll("[data-borrar-def]").forEach(b =>
-    b.addEventListener("click", () => pedirEliminacionDefinitiva(Number(b.dataset.borrarDef)))
-  );
+  const texto = document.getElementById("confElimTexto");
+  if (texto) texto.textContent = `Se devolverá a "${p.nombre}" (${p.codigo}) a la lista de pacientes activos. Introduce tu contraseña de usuario para confirmar.`;
+  abrirModal("modalConfirmarEliminacion");
+  if (pass) setTimeout(() => pass.focus(), 50);
 }
 
-let pendienteEliminarDef = null;
+function confirmarReactivarPaciente() {
+  if (pendienteReactivarPac === null) return;
+  const id = pendienteReactivarPac;
+  const p = State.pacientes.find(x => x.id === id);
+  const pass = document.getElementById("confPassword");
+  const passVal = pass ? pass.value : "";
+  const user = State.users.find(u => u.id === (State.session && State.session.id));
+  const msg = document.getElementById("confElimMsg");
+  const ok = user && user.password === passVal;
+  if (msg) {
+    if (!ok) {
+      msg.textContent = "Contraseña incorrecta. Introduce tu contraseña de usuario.";
+      msg.className = "form-msg error";
+      if (pass) { pass.value = ""; setTimeout(() => pass.focus(), 50); }
+      return;
+    }
+    msg.textContent = "";
+    msg.className = "form-msg";
+  }
+  if (!p) { pendienteReactivarPac = null; cerrarModales(); return; }
+  p.eliminado = false;
+  delete p.fechaEliminado;
+  saveKey("pacientes");
+  fillSelects();
+  pendienteReactivarPac = null;
+  cerrarModales();
+  renderPacientes(document.getElementById("buscarPaciente").value);
+  renderCitas();
+  renderCitasSinConsulta();
+  renderDocumentos();
+  renderFacturas();
+  renderRecetas();
+  renderRegistros();
+  renderHome();
+}
+
+function confirmarAccionPaciente() {
+  if (pendienteBorrarPac !== null) return confirmarBorrarPaciente();
+  if (pendienteReactivarPac !== null) return confirmarReactivarPaciente();
+  if (pendienteEliminarDef !== null) return confirmarEliminacionDefinitiva();
+}
 
 function pedirEliminacionDefinitiva(id) {
   const p = State.pacientes.find(x => x.id === id);
   if (!p) return;
   pendienteEliminarDef = id;
+  const titulo = document.getElementById("confElimTitulo");
+  if (titulo) titulo.textContent = "Eliminar definitivamente";
+  const btn = document.getElementById("btnConfEliminar");
+  if (btn) btn.textContent = "Eliminar definitivamente";
   const pass = document.getElementById("confPassword");
   if (pass) pass.value = "";
   const msg = document.getElementById("confElimMsg");
@@ -1265,7 +1373,6 @@ function confirmarEliminacionDefinitiva() {
   renderRecetas();
   renderRegistros();
   renderCitasAux();
-  renderPacientesEliminados();
   renderHome();
 }
 
@@ -1295,7 +1402,7 @@ function renderCitas() {
   if (!lista) return;
 
   const data = State.citas
-    .filter(c => !c.completada)
+    .filter(c => !c.completada && !c.cancelada)
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
 
   if (data.length === 0) {
@@ -1320,6 +1427,9 @@ function renderCitas() {
           <button class="btn-icon" data-completar-cita="${c.id}" title="Marcar como completada">
             <span class="material-symbols-outlined">check_circle</span>
           </button>
+          <button class="btn-icon" data-cancelar-cita="${c.id}" title="Cancelar cita">
+            <span class="material-symbols-outlined">event_busy</span>
+          </button>
           ${pacienteEliminadoDe(c.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-cita="${c.id}" title="Eliminar cita">
             <span class="material-symbols-outlined">delete</span>
           </button>`}
@@ -1330,6 +1440,10 @@ function renderCitas() {
 
   lista.querySelectorAll("[data-completar-cita]").forEach(b =>
     b.addEventListener("click", () => abrirModalCompletarCita(Number(b.dataset.completarCita)))
+  );
+
+  lista.querySelectorAll("[data-cancelar-cita]").forEach(b =>
+    b.addEventListener("click", () => cancelarCita(Number(b.dataset.cancelarCita)))
   );
 
   lista.querySelectorAll("[data-borrar-cita]").forEach(b =>
@@ -1343,6 +1457,82 @@ function renderCitas() {
   renderCitasAux();
 }
 
+function cancelarCita(id) {
+  const c = State.citas.find(x => x.id === id);
+  if (!c) return;
+  const p = State.pacientes.find(x => x.id === c.pacienteId);
+  if (!confirm(`¿Cancelar la cita de "${p ? p.nombre : "paciente"}" del ${c.fecha} a las ${fmtHora12(c.hora, c.amPm)}?`)) return;
+  c.cancelada = true;
+  c.fechaCancelacion = isoLocal(new Date());
+  saveKey("citas");
+  renderCitas();
+  renderCitasCanceladas();
+  renderHome();
+}
+
+function renderCitasCanceladas() {
+  const lista = document.getElementById("listaCitasCanceladas");
+  if (!lista) return;
+  const countEl = document.getElementById("countCitasCanceladas");
+
+  const data = State.citas
+    .filter(c => c.cancelada)
+    .sort((a, b) => (b.fechaCancelacion || b.fecha || "").localeCompare(a.fechaCancelacion || a.fecha || ""));
+
+  if (countEl) countEl.textContent = data.length;
+
+  if (data.length === 0) {
+    lista.innerHTML = `<p class="empty">No hay citas canceladas.</p>`;
+    return;
+  }
+
+  lista.innerHTML = data.map(c => {
+    const p = State.pacientes.find(x => x.id === c.pacienteId);
+    const fechaCanc = fmtFechaES(c.fechaCancelacion || c.fecha);
+    return `
+      <div class="list-item">
+        <div class="item-main">
+          <strong>${p ? p.nombre : "Paciente eliminado"}</strong>
+          <span class="tag tag-cancel">Cancelada ${fechaCanc}</span>
+          <span class="tag">${c.fecha} · ${fmtHora12(c.hora, c.amPm)}</span>
+          <span class="tag">Turno ${c.turno || "—"}</span>
+        </div>
+        <div class="item-sub">${c.motivo || "Sin motivo"}</div>
+        <div class="item-actions">
+          <button class="btn-icon" data-reabrir-cita="${c.id}" title="Restaurar cita">
+            <span class="material-symbols-outlined">refund</span>
+          </button>
+          <button class="btn-icon danger" data-borrar-cita-c="${c.id}" title="Eliminar cita">
+            <span class="material-symbols-outlined">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  lista.querySelectorAll("[data-reabrir-cita]").forEach(b =>
+    b.addEventListener("click", () => {
+      const c = State.citas.find(x => x.id === Number(b.dataset.reabrirCita));
+      if (!c) return;
+      c.cancelada = false;
+      delete c.fechaCancelacion;
+      saveKey("citas");
+      renderCitas();
+      renderCitasCanceladas();
+      renderHome();
+    })
+  );
+
+  lista.querySelectorAll("[data-borrar-cita-c]").forEach(b =>
+    b.addEventListener("click", () => {
+      State.citas = State.citas.filter(x => x.id !== Number(b.dataset.borrarCitaC));
+      saveKey("citas");
+      renderCitas();
+      renderCitasCanceladas();
+      renderHome();
+    })
+  );
+}
 function renderCitasCompletadas() {
   const lista = document.getElementById("listaCitasCompletadas");
   if (!lista) return;
@@ -1521,12 +1711,21 @@ function renderRegistros(filtro = "") {
   if (!lista) return;
 
   const q = filtro.trim().toLowerCase();
-  const data = [...State.registros].sort((a, b) => b.fecha.localeCompare(a.fecha));
 
-  const filtrados = data.filter(r => {
+  const items = [];
+  State.registros.forEach(r => items.push({
+    kind: "registro", id: r.id, fecha: r.fecha, pacienteId: r.pacienteId,
+    titulo: r.titulo, detalle: r.detalle || "", tipo: r.tipo, archivo: r.archivo
+  }));
+  State.evaluaciones.forEach(e => items.push({
+    kind: "eval", id: e.id, fecha: e.fecha || "", pacienteId: e.pacienteId, titulo: "Evaluación física"
+  }));
+  items.sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+  const filtrados = items.filter(it => {
     if (!q) return true;
-    const p = State.pacientes.find(x => x.id === r.pacienteId);
-    return (p && p.nombre.toLowerCase().includes(q)) || r.titulo.toLowerCase().includes(q);
+    const p = State.pacientes.find(x => x.id === it.pacienteId);
+    return (p && p.nombre.toLowerCase().includes(q)) || it.titulo.toLowerCase().includes(q);
   });
 
   if (filtrados.length === 0) {
@@ -1536,14 +1735,44 @@ function renderRegistros(filtro = "") {
 
   lista.innerHTML = filtrados.map(r => {
     const p = State.pacientes.find(x => x.id === r.pacienteId);
+
+    if (r.kind === "eval") {
+      const ev = State.evaluaciones.find(e => e.id === r.id);
+      const claves = Object.keys(ev && ev.lesiones ? ev.lesiones : {});
+      const resumen = claves.slice(0, 4).map(k => NOMBRES_PARTES[k] || k).join(", ");
+      return `
+      <div class="list-item">
+        <div class="item-main">
+          <strong>${r.titulo}</strong>
+          <span class="tag">${r.fecha}</span>
+          <span class="tag">${ev && ev.sexo ? (ev.sexo === "femenino" ? "Femenino" : "Masculino") : ""}</span>
+        </div>
+        <div class="item-sub">${p ? p.nombre : "Paciente eliminado"} — ${claves.length ? claves.length + " zona(s) marcada(s) · " + resumen + (claves.length > 4 ? "…" : "") : "Sin zonas marcadas"}</div>
+        <div class="item-actions">
+          <button class="btn btn--ghost-dark btn-small" data-ver-eval="${r.id}" title="Ver resultado de la evaluación">
+            <span class="material-symbols-outlined">visibility</span> Ver resultado
+          </button>
+          ${pacienteEliminadoDe(r.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-eval="${r.id}" title="Eliminar evaluación">
+            <span class="material-symbols-outlined">delete</span>
+          </button>`}
+        </div>
+      </div>
+    `;
+    }
+
+    const prox = r.proximaCita;
+    const proxTexto = prox && prox.fecha
+      ? ` · Próxima cita: ${prox.fecha}${prox.hora ? " " + prox.hora : ""}${prox.amPm ? " " + prox.amPm : ""}`
+      : "";
     return `
       <div class="list-item">
         <div class="item-main">
           <strong>${r.titulo}</strong>
           <span class="tag">${r.fecha}</span>
+          ${r.tipo ? `<span class="tag">${r.tipo}</span>` : ""}
           ${r.archivo ? `<span class="tag">📎 adjunto</span>` : ""}
         </div>
-        <div class="item-sub">${p ? p.nombre : "Paciente eliminado"} — ${r.detalle || ""}</div>
+        <div class="item-sub">${p ? p.nombre : "Paciente eliminado"} — ${r.detalle || ""}${proxTexto}</div>
         <div class="item-actions">
           ${r.archivo ? `<button class="btn-icon" data-ver-archivo="${r.id}" title="Ver documento adjunto">
             <span class="material-symbols-outlined">download</span>
@@ -1570,6 +1799,18 @@ function renderRegistros(filtro = "") {
         a.click();
         a.remove();
       }
+    })
+  );
+  lista.querySelectorAll("[data-ver-eval]").forEach(b =>
+    b.addEventListener("click", () => verEvaluacion(Number(b.dataset.verEval)))
+  );
+  lista.querySelectorAll("[data-borrar-eval]").forEach(b =>
+    b.addEventListener("click", () => {
+      if (!confirm("¿Eliminar esta evaluación física del historial clínico?")) return;
+      State.evaluaciones = State.evaluaciones.filter(e => e.id !== Number(b.dataset.borrarEval));
+      saveKey("evaluaciones");
+      renderRegistros();
+      renderEvaluacionesGuardadas();
     })
   );
   lista.querySelectorAll("[data-editar-reg]").forEach(b =>
@@ -1658,6 +1899,8 @@ function abrirModalEditarRegistro(id) {
   const sel = document.getElementById("regEPaciente");
   if (sel) sel.value = r.pacienteId;
   document.getElementById("regETitulo").value = r.titulo;
+  const tipoEl = document.getElementById("regETipo");
+  if (tipoEl) tipoEl.value = r.tipo || "Motivo de consulta";
   document.getElementById("regEFecha").value = fechaESaISO(r.fecha);
   document.getElementById("regEDetalle").value = r.detalle || "";
   document.getElementById("regEArchivo").value = "";
@@ -1677,6 +1920,8 @@ function guardarRegistroEditado() {
 
   r.pacienteId = Number(document.getElementById("regEPaciente").value);
   r.titulo = titulo;
+  const tipoEl = document.getElementById("regETipo");
+  if (tipoEl) r.tipo = tipoEl.value;
   const fechaEl = document.getElementById("regEFecha").value;
   r.fecha = fechaEl ? fmtFechaES(fechaEl) : new Date().toLocaleDateString("es-ES");
   r.detalle = document.getElementById("regEDetalle").value.trim();
@@ -1711,7 +1956,7 @@ function renderProximasCitas() {
   const hoyISO = hoy.toISOString();
 
   const proximas = State.citas
-    .filter(c => !c.completada && (c.fecha + "T" + (c.hora || "23:59")) >= hoyISO)
+    .filter(c => !c.completada && !c.cancelada && (c.fecha + "T" + (c.hora || "23:59")) >= hoyISO)
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora))
     .slice(0, 5);
 
@@ -1747,6 +1992,887 @@ function abrirImpresion(titulo, cuerpo) {
     ${cuerpo}
   `;
   window.print();
+}
+
+const TIPOS_LESION = [
+  { id: "dolor", label: "Dolor", color: "#3d648a" },
+  { id: "leve", label: "Contusión leve", color: "#f4d35e" },
+  { id: "esguince", label: "Esguince", color: "#f08a4b" },
+  { id: "fractura", label: "Fractura", color: "#e63946" },
+  { id: "contractura", label: "Contractura", color: "#9b5de5" },
+  { id: "edema", label: "Edema / inflamación", color: "#2a9d8f" }
+];
+
+const NOMBRES_PARTES = {
+  cabeza: "Cabeza",
+  cuello: "Cuello",
+  hombroIzq: "Hombro izquierdo",
+  hombroDer: "Hombro derecho",
+  brazoIzq: "Brazo izquierdo",
+  brazoDer: "Brazo derecho",
+  antebrazoIzq: "Antebrazo izquierdo",
+  antebrazoDer: "Antebrazo derecho",
+  manoIzq: "Mano izquierda",
+  manoDer: "Mano derecha",
+  pecho: "Pecho / Tórax",
+  abdomen: "Abdomen",
+  cadera: "Cadera",
+  musloIzq: "Muslo izquierdo",
+  musloDer: "Muslo derecho",
+  piernaIzq: "Pierna izquierda",
+  piernaDer: "Pierna derecha",
+  pieIzq: "Pie izquierdo",
+  pieDer: "Pie derecho",
+  pulgarIzq: "Pulgar izquierdo",
+  pulgarDer: "Pulgar derecho",
+  indiceIzq: "Índice izquierdo",
+  indiceDer: "Índice derecho",
+  medioIzq: "Medio izquierdo",
+  medioDer: "Medio derecho",
+  anularIzq: "Anular izquierdo",
+  anularDer: "Anular derecho",
+  meniqueIzq: "Meñique izquierdo",
+  meniqueDer: "Meñique derecho",
+  pulgarA1Izq: "Pulgar izq · articulación 1",
+  pulgarA2Izq: "Pulgar izq · articulación 2",
+  pulgarA1Der: "Pulgar der · articulación 1",
+  pulgarA2Der: "Pulgar der · articulación 2",
+  indiceA1Izq: "Índice izq · articulación 1",
+  indiceA2Izq: "Índice izq · articulación 2",
+  indiceA3Izq: "Índice izq · articulación 3",
+  indiceA1Der: "Índice der · articulación 1",
+  indiceA2Der: "Índice der · articulación 2",
+  indiceA3Der: "Índice der · articulación 3",
+  medioA1Izq: "Medio izq · articulación 1",
+  medioA2Izq: "Medio izq · articulación 2",
+  medioA3Izq: "Medio izq · articulación 3",
+  medioA1Der: "Medio der · articulación 1",
+  medioA2Der: "Medio der · articulación 2",
+  medioA3Der: "Medio der · articulación 3",
+  anularA1Izq: "Anular izq · articulación 1",
+  anularA2Izq: "Anular izq · articulación 2",
+  anularA3Izq: "Anular izq · articulación 3",
+  anularA1Der: "Anular der · articulación 1",
+  anularA2Der: "Anular der · articulación 2",
+  anularA3Der: "Anular der · articulación 3",
+  meniqueA1Izq: "Meñique izq · articulación 1",
+  meniqueA2Izq: "Meñique izq · articulación 2",
+  meniqueA3Izq: "Meñique izq · articulación 3",
+  meniqueA1Der: "Meñique der · articulación 1",
+  meniqueA2Der: "Meñique der · articulación 2",
+  meniqueA3Der: "Meñique der · articulación 3",
+  palmaIzq: "Palma de la mano izquierda",
+  palmaDer: "Palma de la mano derecha",
+  radioIzq: "Muñeca / radio izquierdo",
+  radioDer: "Muñeca / radio derecho",
+  dedo1Izq: "Dedo gordo del pie izquierdo",
+  dedo2Izq: "2.º dedo del pie izquierdo",
+  dedo3Izq: "3.er dedo del pie izquierdo",
+  dedo4Izq: "4.º dedo del pie izquierdo",
+  dedo5Izq: "5.º dedo del pie izquierdo",
+  dedo1Der: "Dedo gordo del pie derecho",
+  dedo2Der: "2.º dedo del pie derecho",
+  dedo3Der: "3.er dedo del pie derecho",
+  dedo4Der: "4.º dedo del pie derecho",
+  dedo5Der: "5.º dedo del pie derecho",
+  dedo1A1Izq: "Dedo gordo izq · articulación 1",
+  dedo1A2Izq: "Dedo gordo izq · articulación 2",
+  dedo1A1Der: "Dedo gordo der · articulación 1",
+  dedo1A2Der: "Dedo gordo der · articulación 2",
+  dedo2A1Izq: "2.º dedo pie izq · articulación 1",
+  dedo2A2Izq: "2.º dedo pie izq · articulación 2",
+  dedo2A3Izq: "2.º dedo pie izq · articulación 3",
+  dedo2A1Der: "2.º dedo pie der · articulación 1",
+  dedo2A2Der: "2.º dedo pie der · articulación 2",
+  dedo2A3Der: "2.º dedo pie der · articulación 3",
+  dedo3A1Izq: "3.er dedo pie izq · articulación 1",
+  dedo3A2Izq: "3.er dedo pie izq · articulación 2",
+  dedo3A3Izq: "3.er dedo pie izq · articulación 3",
+  dedo3A1Der: "3.er dedo pie der · articulación 1",
+  dedo3A2Der: "3.er dedo pie der · articulación 2",
+  dedo3A3Der: "3.er dedo pie der · articulación 3",
+  dedo4A1Izq: "4.º dedo pie izq · articulación 1",
+  dedo4A2Izq: "4.º dedo pie izq · articulación 2",
+  dedo4A3Izq: "4.º dedo pie izq · articulación 3",
+  dedo4A1Der: "4.º dedo pie der · articulación 1",
+  dedo4A2Der: "4.º dedo pie der · articulación 2",
+  dedo4A3Der: "4.º dedo pie der · articulación 3",
+  dedo5A1Izq: "5.º dedo pie izq · articulación 1",
+  dedo5A2Izq: "5.º dedo pie izq · articulación 2",
+  dedo5A3Izq: "5.º dedo pie izq · articulación 3",
+  dedo5A1Der: "5.º dedo pie der · articulación 1",
+  dedo5A2Der: "5.º dedo pie der · articulación 2",
+  dedo5A3Der: "5.º dedo pie der · articulación 3",
+  plantaIzq: "Planta del pie izquierdo",
+  plantaDer: "Planta del pie derecho"
+};
+
+let cacheFiguras = {};
+const PUNTOS_FOTO = ["manoIzq", "manoDer", "pieIzq", "pieDer"];
+let lesionesEval = {};
+let lesionTipoActual = "dolor";
+let lesionBorrador = false;
+let sexoEval = "masculino";
+
+const COLOR_SKIN = "#f4c8a6";
+const COLOR_SKIN_LINEA = "#c7956d";
+
+function oscurecerColor(hex, f) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const r = Math.round(((n >> 16) & 255) * f);
+  const g = Math.round(((n >> 8) & 255) * f);
+  const b = Math.round((n & 255) * f);
+  return `rgb(${r},${g},${b})`;
+}
+
+function colorearPartes() {
+  document.querySelectorAll(".eval-part, .eval-subpart").forEach(el => {
+    const les = lesionesEval[el.dataset.part];
+    const esFoto = !!el.closest(".eval-hitlayer");
+    if (les) {
+      el.style.fill = les.color;
+      el.style.fillOpacity = esFoto ? "0.55" : "1";
+      el.style.stroke = oscurecerColor(les.color, 0.72);
+      el.style.strokeOpacity = "0.9";
+      el.style.strokeWidth = "2.5";
+    } else if (esFoto) {
+      const esPunto = PUNTOS_FOTO.indexOf(el.dataset.part) !== -1;
+      if (esPunto) {
+        el.style.fill = "rgba(255,255,255,0.28)";
+        el.style.fillOpacity = "1";
+        el.style.stroke = "rgba(15,30,55,0.9)";
+        el.style.strokeOpacity = "1";
+        el.style.strokeWidth = "2.5";
+      } else {
+        el.style.fill = "rgba(255,255,255,0.10)";
+        el.style.fillOpacity = "1";
+        el.style.stroke = "rgba(15,30,55,0.6)";
+        el.style.strokeOpacity = "1";
+        el.style.strokeWidth = "2";
+      }
+    } else {
+      el.style.fill = COLOR_SKIN;
+      el.style.fillOpacity = "1";
+      el.style.stroke = COLOR_SKIN_LINEA;
+      el.style.strokeOpacity = "1";
+      el.style.strokeWidth = "1.6";
+    }
+  });
+}
+
+function marcarParte(pos) {
+  if (!pos) return;
+  if (pos === "manoIzq" || pos === "manoDer" || pos === "pieIzq" || pos === "pieDer") {
+    abrirExtremidad(pos);
+    return;
+  }
+  if (lesionBorrador) {
+    delete lesionesEval[pos];
+  } else {
+    const t = TIPOS_LESION.find(x => x.id === lesionTipoActual);
+    if (!t) return;
+    if (lesionesEval[pos] && lesionesEval[pos].id === t.id) delete lesionesEval[pos];
+    else lesionesEval[pos] = { id: t.id, color: t.color, label: t.label };
+  }
+  colorearPartes();
+  renderPartesAfectadas();
+}
+
+function renderLesionTipos() {
+  refreshChips();
+}
+
+function renderPartesAfectadas() {
+  const cont = document.getElementById("partesAfectadas");
+  const contador = document.getElementById("evalContador");
+  if (!cont) return;
+  const keys = Object.keys(lesionesEval);
+  if (contador) contador.textContent = keys.length;
+  if (!keys.length) {
+    cont.innerHTML = `<p class="empty">Aún no marcas partes del cuerpo.</p>`;
+    return;
+  }
+  cont.innerHTML = keys.map(k => {
+    const l = lesionesEval[k];
+    return `
+      <div class="eval-parte">
+        <span class="lesion-dot" style="background:${l.color};--chip:${l.color}"></span>
+        <span class="eval-parte-nombre">${NOMBRES_PARTES[k] || k} · ${l.label}</span>
+        <button type="button" class="btn-icon danger" data-quitar-lesion="${k}" title="Quitar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>`;
+  }).join("");
+  cont.querySelectorAll("[data-quitar-lesion]").forEach(b => b.addEventListener("click", () => {
+    delete lesionesEval[b.dataset.quitarLesion];
+    colorearPartes();
+    renderPartesAfectadas();
+  }));
+}
+
+function cambiarSexoEval(sexo) {
+  sexoEval = sexo;
+  const m = document.getElementById("svgMasculino");
+  const f = document.getElementById("svgFemenino");
+  if (m) m.hidden = sexo !== "masculino";
+  if (f) f.hidden = sexo !== "femenino";
+  const bm = document.getElementById("btnEvalMasculino");
+  const bf = document.getElementById("btnEvalFemenino");
+  if (bm) bm.classList.toggle("active", sexo === "masculino");
+  if (bf) bf.classList.toggle("active", sexo === "femenino");
+}
+
+function initEvaluacionFisica() {
+  renderLesionTipos();
+  cambiarSexoEval("masculino");
+  document.querySelectorAll(".eval-part").forEach(el => {
+    el.addEventListener("click", () => marcarParte(el.dataset.part));
+  });
+  const bm = document.getElementById("btnEvalMasculino");
+  const bf = document.getElementById("btnEvalFemenino");
+  if (bm) bm.addEventListener("click", () => cambiarSexoEval("masculino"));
+  if (bf) bf.addEventListener("click", () => cambiarSexoEval("femenino"));
+  const borra = document.getElementById("btnEvalBorrador");
+  if (borra) borra.addEventListener("click", () => {
+    lesionBorrador = !lesionBorrador;
+    borra.classList.toggle("active", lesionBorrador);
+    renderLesionTipos();
+  });
+  const limpiar = document.getElementById("btnEvalLimpiar");
+  if (limpiar) limpiar.addEventListener("click", () => {
+    lesionesEval = {};
+    colorearPartes();
+    renderPartesAfectadas();
+  });
+  const btnExtBorrador = document.getElementById("btnEvalExtremBorrador");
+  if (btnExtBorrador) btnExtBorrador.addEventListener("click", () => {
+    lesionBorrador = !lesionBorrador;
+    syncBorradorUI();
+    refreshChips();
+  });
+  const btnExtTodo = document.getElementById("btnEvalExtremTodo");
+  if (btnExtTodo) btnExtTodo.addEventListener("click", marcarExtremidadCompleta);
+  const btnExtLimpiar = document.getElementById("btnEvalExtremLimpiar");
+  if (btnExtLimpiar) btnExtLimpiar.addEventListener("click", () => {
+    limpiarExtremidad();
+  });
+  const btnGuardar = document.getElementById("btnEvalGuardar");
+  if (btnGuardar) btnGuardar.addEventListener("click", guardarEvaluacion);
+  fillEvalPaciente();
+  renderEvaluacionesGuardadas();
+  renderPartesAfectadas();
+  colorearPartes();
+  refreshChips();
+  syncBorradorUI();
+  initFiguras();
+}
+
+const EXTREM_POR_PARTE = {
+  manoIzq: { tipo: "mano", lado: "izq" },
+  manoDer: { tipo: "mano", lado: "der" },
+  pieIzq: { tipo: "pie", lado: "izq" },
+  pieDer: { tipo: "pie", lado: "der" }
+};
+
+let extremidadActiva = null;
+
+function renderLesionChips(cont) {
+  if (!cont) return;
+  cont.innerHTML = TIPOS_LESION.map(t => `
+    <button type="button" class="lesion-chip ${lesionTipoActual === t.id && !lesionBorrador ? "active" : ""}" data-tipo="${t.id}" style="--chip:${t.color}">
+      <span class="lesion-dot"></span>${t.label}
+    </button>`).join("");
+  cont.querySelectorAll("[data-tipo]").forEach(b => b.addEventListener("click", () => {
+    lesionTipoActual = b.dataset.tipo;
+    lesionBorrador = false;
+    refreshChips();
+    syncBorradorUI();
+  }));
+}
+
+function refreshChips() {
+  renderLesionChips(document.getElementById("lesionTipos"));
+  renderLesionChips(document.getElementById("lesionChipsExtrem"));
+}
+
+function syncBorradorUI() {
+  const b1 = document.getElementById("btnEvalBorrador");
+  const b2 = document.getElementById("btnEvalExtremBorrador");
+  if (b1) b1.classList.toggle("active", lesionBorrador);
+  if (b2) b2.classList.toggle("active", lesionBorrador);
+}
+
+const ZONAS_EVAL_PLANTILLA = {
+  cabeza:      { forma: "circle",   cx: 0.5,   cy: 0.075, r: 0.065 },
+  cuello:      { forma: "rect",     x: 0.43,   y: 0.135,  w: 0.14,  h: 0.055, rx: 0.02 },
+  hombroIzq:   { forma: "ellipse",  cx: 0.24,  cy: 0.205, rx: 0.10, ry: 0.04 },
+  hombroDer:   { forma: "ellipse",  cx: 0.76,  cy: 0.205, rx: 0.10, ry: 0.04 },
+  pecho:       { forma: "ellipse",  cx: 0.5,   cy: 0.30,  rx: 0.24, ry: 0.13 },
+  abdomen:     { forma: "ellipse",  cx: 0.5,   cy: 0.46,  rx: 0.19, ry: 0.115 },
+  cadera:      { forma: "ellipse",  cx: 0.5,   cy: 0.605, rx: 0.205, ry: 0.085 },
+  brazoIzq:    { forma: "circle",   cx: 0.10,  cy: 0.33,  r: 0.025 },
+  antebrazoIzq:{ forma: "circle",   cx: 0.128, cy: 0.50,  r: 0.025 },
+  manoIzq:     { forma: "circle",   cx: 0.13,  cy: 0.62,  r: 0.02 },
+  brazoDer:    { forma: "circle",   cx: 0.90,  cy: 0.33,  r: 0.025 },
+  antebrazoDer:{ forma: "circle",   cx: 0.872, cy: 0.50,  r: 0.025 },
+  manoDer:     { forma: "circle",   cx: 0.87,  cy: 0.62,  r: 0.02 },
+  musloIzq:    { forma: "circle",   cx: 0.40,  cy: 0.758, r: 0.025 },
+  musloDer:    { forma: "circle",   cx: 0.60,  cy: 0.758, r: 0.025 },
+  piernaIzq:   { forma: "circle",   cx: 0.4025, cy: 0.898, r: 0.025 },
+  piernaDer:   { forma: "circle",   cx: 0.5975, cy: 0.898, r: 0.025 },
+  pieIzq:      { forma: "ellipse",  cx: 0.40,  cy: 0.975, rx: 0.055, ry: 0.02 },
+  pieDer:      { forma: "ellipse",  cx: 0.60,  cy: 0.975, rx: 0.055, ry: 0.02 }
+};
+
+function redond(v) {
+  return Math.round(v * 10) / 10;
+}
+
+function procesarFigura(src, cb) {
+  const img = new Image();
+  img.onload = function () {
+    try {
+      const W = img.naturalWidth;
+      const H = img.naturalHeight;
+      const c = document.createElement("canvas");
+      c.width = W;
+      c.height = H;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, W, H).data;
+      let rsum = 0, gsum = 0, bsum = 0, cont = 0;
+      const toma = function (x, y) {
+        const i = (y * W + x) * 4;
+        if (data[i + 3] > 180) {
+          rsum += data[i];
+          gsum += data[i + 1];
+          bsum += data[i + 2];
+          cont++;
+        }
+      };
+      for (let x = 0; x < W; x++) { toma(x, 0); toma(x, H - 1); }
+      for (let y = 0; y < H; y++) { toma(0, y); toma(W - 1, y); }
+      let bgR = 255, bgG = 255, bgB = 255;
+      if (cont >= 15) {
+        bgR = rsum / cont;
+        bgG = gsum / cont;
+        bgB = bsum / cont;
+      }
+      const out = ctx.createImageData(W, H);
+      const od = out.data;
+      let minX = W, minY = H, maxX = -1, maxY = -1;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          const a0 = data[i + 3];
+          od[i] = data[i];
+          od[i + 1] = data[i + 1];
+          od[i + 2] = data[i + 2];
+          od[i + 3] = a0;
+          if (a0 < 12) continue;
+          const dd = Math.max(
+            Math.abs(data[i] - bgR),
+            Math.abs(data[i + 1] - bgG),
+            Math.abs(data[i + 2] - bgB)
+          );
+          let al = a0;
+          if (dd <= 34) al = 0;
+          else if (dd < 76) al = Math.round(255 * (dd - 34) / 42);
+          else al = 255;
+          od[i + 3] = al;
+          if (al > 90) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      ctx.putImageData(out, 0, 0);
+      if (maxX <= minX || maxY <= minY) {
+        minX = 0; minY = 0; maxX = W - 1; maxY = H - 1;
+      }
+      const bbox = { bx: minX, by: minY, bw: maxX - minX + 1, bh: maxY - minY + 1 };
+      cb({ src: c.toDataURL("image/png"), w: W, h: H, bbox: bbox });
+    } catch (e) {
+      cb(null);
+    }
+  };
+  img.onerror = function () { cb(null); };
+  img.src = src;
+}
+
+function generarZonasInfo(info) {
+  const W = info.w;
+  const H = info.h;
+  const bw = info.bbox.bw || W;
+  const bh = info.bbox.bh || H;
+  const bx = info.bbox.bx || 0;
+  const by = info.bbox.by || 0;
+  const X = function (fx) { return bx + fx * bw; };
+  const Y = function (fy) { return by + fy * bh; };
+  const out = {};
+  Object.keys(ZONAS_EVAL_PLANTILLA).forEach(function (part) {
+    const z = ZONAS_EVAL_PLANTILLA[part];
+    if (z.forma === "circle") {
+      out[part] = { forma: z.forma, cx: redond(X(z.cx)), cy: redond(Y(z.cy)), r: redond(z.r * bh) };
+    } else if (z.forma === "ellipse") {
+      out[part] = { forma: z.forma, cx: redond(X(z.cx)), cy: redond(Y(z.cy)), rx: redond(z.rx * bw), ry: redond(z.ry * bh) };
+    } else {
+      out[part] = { forma: z.forma, x: redond(X(z.x)), y: redond(Y(z.y)), w: redond(z.w * bw), h: redond(z.h * bh), rx: redond(Math.min(z.rx * bw, z.rx * bh * 2)) };
+    }
+  });
+  return out;
+}
+
+function zonaSVG(g, part, extra) {
+  if (g.forma === "circle") {
+    return `<circle class="eval-part" data-part="${part}" ${extra} cx="${g.cx}" cy="${g.cy}" r="${g.r}"/>`;
+  }
+  if (g.forma === "ellipse") {
+    return `<ellipse class="eval-part" data-part="${part}" ${extra} cx="${g.cx}" cy="${g.cy}" rx="${g.rx}" ry="${g.ry}"/>`;
+  }
+  return `<rect class="eval-part" data-part="${part}" ${extra} x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="${g.rx}"/>`;
+}
+
+function construirZonas(svg, info) {
+  if (!svg) return;
+  const geom = generarZonasInfo(info);
+  svg.setAttribute("viewBox", "0 0 " + info.w + " " + info.h);
+  svg.innerHTML = Object.keys(geom).map(part => zonaSVG(geom[part], part, "")).join("");
+  svg.querySelectorAll(".eval-part").forEach(function (el) {
+    el.addEventListener("click", function () { marcarParte(el.dataset.part); });
+  });
+}
+
+function initFiguras() {
+  const tareas = [
+    { src: "evaluacion_M.png", imagen: "evalImgMasculino", zonas: "svgZonasMasculino", sexo: "masculino" },
+    { src: "evaluacion_f.png", imagen: "evalImgFemenino", zonas: "svgZonasFemenino", sexo: "femenino" }
+  ];
+  tareas.forEach(function (t) {
+    const img = document.getElementById(t.imagen);
+    const svg = document.getElementById(t.zonas);
+    if (!img || !svg) return;
+    procesarFigura(t.src, function (info) {
+      if (!info) return;
+      cacheFiguras[t.sexo] = info;
+      img.src = info.src;
+      construirZonas(svg, info);
+      colorearPartes();
+    });
+  });
+}
+
+function svgEvaluacionResultado(info, lesiones) {
+  const geom = generarZonasInfo(info);
+  const partes = Object.keys(geom).map(function (part) {
+    const le = lesiones[part];
+    const g = geom[part];
+    const fill = le && le.color ? le.color : "transparent";
+    const op = le ? 0.55 : 0;
+    const stroke = le ? oscurecerColor(le.color, 0.72) : "rgba(30, 50, 80, 0.4)";
+    const extra = `fill="${fill}" fill-opacity="${op}" stroke="${stroke}" stroke-width="${le ? 2.5 : 1}"`;
+    return zonaSVG(g, part, extra);
+  }).join("");
+  const s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${info.w} ${info.h}"><image x="0" y="0" width="${info.w}" height="${info.h}" href="${info.src}"/>${partes}</svg>`;
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(s);
+}
+
+function verEvaluacion(id) {
+  const ev = State.evaluaciones.find(e => e.id === id);
+  if (!ev) return;
+  const p = State.pacientes.find(x => x.id === ev.pacienteId);
+  const info = cacheFiguras[ev.sexo] || cacheFiguras.masculino || cacheFiguras.femenino || null;
+  const titulo = document.getElementById("evalResultadoTitulo");
+  if (titulo) titulo.textContent = (p ? p.nombre : "Paciente eliminado") + " · " + fmtFechaES(ev.fecha || "");
+  const img = document.getElementById("evalResultadoImg");
+  if (img) img.src = info ? svgEvaluacionResultado(info, ev.lesiones || {}) : "";
+  const leyenda = document.getElementById("evalResultadoLeyenda");
+  if (leyenda) {
+    const claves = Object.keys(ev.lesiones || {});
+    leyenda.innerHTML = claves.length
+      ? claves.map(k => {
+          const l = ev.lesiones[k];
+          return `<span class="eval-leyenda-item"><span class="lesion-dot" style="background:${l.color};--chip:${l.color}"></span>${NOMBRES_PARTES[k] || k} · ${l.label}</span>`;
+        }).join("")
+      : `<span class="empty">Sin zonas marcadas.</span>`;
+  }
+  const nota = document.getElementById("evalResultadoNota");
+  if (nota) nota.textContent = ev.nota || "Sin descripción.";
+  abrirModal("modalEvalResultado");
+}
+
+const ZONAS_MANO_PLANTILLA = [
+  { part: "meniqueA3", fx: 0.14, fy: 0.16, r: 0.03 },
+  { part: "meniqueA2", fx: 0.14, fy: 0.27, r: 0.03 },
+  { part: "meniqueA1", fx: 0.14, fy: 0.38, r: 0.03 },
+  { part: "anularA3",  fx: 0.30, fy: 0.12, r: 0.03 },
+  { part: "anularA2",  fx: 0.30, fy: 0.23, r: 0.03 },
+  { part: "anularA1",  fx: 0.30, fy: 0.35, r: 0.03 },
+  { part: "medioA3",   fx: 0.46, fy: 0.10, r: 0.03 },
+  { part: "medioA2",   fx: 0.46, fy: 0.21, r: 0.03 },
+  { part: "medioA1",   fx: 0.46, fy: 0.33, r: 0.03 },
+  { part: "indiceA3",  fx: 0.62, fy: 0.12, r: 0.03 },
+  { part: "indiceA2",  fx: 0.62, fy: 0.23, r: 0.03 },
+  { part: "indiceA1",  fx: 0.62, fy: 0.35, r: 0.03 },
+  { part: "pulgarA2",  fx: 0.80, fy: 0.20, r: 0.03 },
+  { part: "pulgarA1",  fx: 0.80, fy: 0.31, r: 0.03 },
+  { part: "radio",     el: true, fx: 0.475, fy: 0.90, rx: 0.20, ry: 0.08 },
+  { part: "palma",     el: true, fx: 0.475, fy: 0.625, rx: 0.30, ry: 0.225 }
+];
+
+function perfilMano(img) {
+  const W = img.naturalWidth || 400;
+  const H = img.naturalHeight || 400;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, W, H).data;
+  let rsum = 0, gsum = 0, bsum = 0, cont = 0;
+  const toma = function (x, y) {
+    const i = (y * W + x) * 4;
+    if (px[i + 3] > 180) { rsum += px[i]; gsum += px[i + 1]; bsum += px[i + 2]; cont++; }
+  };
+  for (let x = 0; x < W; x++) { toma(x, 0); toma(x, H - 1); }
+  for (let y = 0; y < H; y++) { toma(0, y); toma(W - 1, y); }
+  let bgR = 255, bgG = 255, bgB = 255;
+  if (cont >= 15) { bgR = rsum / cont; bgG = gsum / cont; bgB = bsum / cont; }
+  const fg = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const p = i * 4;
+    const dd = Math.max(Math.abs(px[p] - bgR), Math.abs(px[p + 1] - bgG), Math.abs(px[p + 2] - bgB));
+    fg[i] = (px[p + 3] >= 30 && dd >= 40) ? 1 : 0;
+  }
+  return { W: W, H: H, fg: fg };
+}
+
+function detectarDedos(img) {
+  try {
+    const P = perfilMano(img);
+    const W = P.W, H = P.H, fg = P.fg;
+    const topY = new Array(W);
+    for (let x = 0; x < W; x++) {
+      let ty = H;
+      for (let y = 0; y < H; y++) { if (fg[y * W + x]) { ty = y; break; } }
+      topY[x] = ty;
+    }
+    const sm = new Array(W);
+    for (let x = 0; x < W; x++) {
+      let s = 0, n = 0;
+      for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx;
+        if (xx >= 0 && xx < W) { s += topY[xx]; n++; }
+      }
+      sm[x] = s / n;
+    }
+    const mins = [];
+    for (let x = 1; x < W - 1; x++) {
+      if (sm[x] < H && sm[x] <= sm[x - 1] && sm[x] <= sm[x + 1]) mins.push({ x: x, y: sm[x] });
+    }
+    if (mins.length < 4) return null;
+    mins.sort(function (a, b) { return a.y - b.y; });
+    const radio = Math.max(6, Math.round(W * 0.06));
+    const clus = [];
+    mins.forEach(function (m) {
+      let f = null;
+      clus.forEach(function (cl) {
+        if (!f && cl.items.some(function (it) { return Math.abs(it.x - m.x) <= radio; })) f = cl;
+      });
+      if (f) { f.items.push(m); if (m.y < f.tipY) f.tipY = m.y; }
+      else clus.push({ items: [m], tipY: m.y });
+    });
+    clus.sort(function (a, b) { return a.tipY - b.tipY; });
+    const fingerClusters = clus.slice(0, 5);
+    if (fingerClusters.length < 4) return null;
+    const enDedo = {};
+    fingerClusters.forEach(function (cl) {
+      const cx = Math.round(cl.items.reduce(function (s, it) { return s + it.x; }, 0) / cl.items.length);
+      for (let x = cx - Math.round(W * 0.035); x <= cx + Math.round(W * 0.035); x++) {
+        if (x >= 0 && x < W) enDedo[x] = true;
+      }
+    });
+    const gaps = [];
+    for (let x = 0; x < W; x++) {
+      if (topY[x] < H && !enDedo[x]) gaps.push(topY[x]);
+    }
+    let palmTop = Math.round(H * 0.4);
+    if (gaps.length > 10) {
+      gaps.sort(function (a, b) { return a - b; });
+      palmTop = gaps[Math.floor(gaps.length * 0.5)];
+    }
+    if (palmTop <= 0 || palmTop >= H) palmTop = Math.round(H * 0.4);
+    const dedos = fingerClusters.map(function (cl) {
+      return { x: Math.round(cl.items.reduce(function (s, it) { return s + it.x; }, 0) / cl.items.length), tip: cl.tipY };
+    });
+    return { W: W, H: H, dedos: dedos, palmTop: palmTop };
+  } catch (e) {
+    return null;
+  }
+}
+
+function construirZonasMano(det, lado, W, H) {
+  const s = lado === "izq" ? "Izq" : "Der";
+  if (!det || !det.dedos || det.dedos.length < 4) {
+    return ZONAS_MANO_PLANTILLA.map(function (z) {
+      const cx = z.fx * W;
+      const cy = z.fy * H;
+      if (z.el) {
+        return `<ellipse class="eval-subpart" data-part="${z.part}${s}" cx="${redond(cx)}" cy="${redond(cy)}" rx="${redond(z.rx * W)}" ry="${redond(z.ry * H)}"/>`;
+      }
+      return `<circle class="eval-subpart" data-part="${z.part}${s}" cx="${redond(cx)}" cy="${redond(cy)}" r="${redond(z.r * H)}"/>`;
+    }).join("");
+  }
+  const ordenDer = ["pulgar", "indice", "medio", "anular", "menique"];
+  const ordenIzq = ["menique", "anular", "medio", "indice", "pulgar"];
+  const tabla = lado === "izq" ? ordenIzq : ordenDer;
+  const orden = det.dedos.slice().sort(function (a, b) { return a.x - b.x; });
+  const pieces = [];
+  orden.forEach(function (f, i) {
+    const nombre = tabla[i] || "indice";
+    const len = Math.max(4, det.palmTop - f.tip);
+    const cuantas = nombre === "pulgar" ? 2 : 3;
+    for (let k = 1; k <= cuantas; k++) {
+      const frac = k / (cuantas + 1);
+      const cy = Math.round(f.tip + len * frac);
+      const r = Math.max(5, Math.round(H * 0.02));
+      const clave = nombre + "A" + k + s;
+      const titulo = NOMBRES_PARTES[clave] || clave;
+      pieces.push(`<circle class="eval-subpart" data-part="${clave}" cx="${f.x}" cy="${cy}" r="${r}" title="${titulo}"/>`);
+    }
+  });
+  const cyP = Math.round(det.palmTop + (H - det.palmTop) * 0.42);
+  pieces.push(`<ellipse class="eval-subpart" data-part="palma${s}" cx="${Math.round(W * 0.5)}" cy="${cyP}" rx="${Math.round(W * 0.34)}" ry="${Math.round((H - det.palmTop) * 0.30)}" title="${NOMBRES_PARTES["palma" + s] || ""}"/>`);
+  const cyR = Math.round(det.palmTop + (H - det.palmTop) * 0.80);
+  pieces.push(`<ellipse class="eval-subpart" data-part="radio${s}" cx="${Math.round(W * 0.5)}" cy="${cyR}" rx="${Math.round(W * 0.22)}" ry="${Math.round((H - det.palmTop) * 0.10)}" title="${NOMBRES_PARTES["radio" + s] || ""}"/>`);
+  return pieces.join("");
+}
+
+function construirZonasPie(det, lado, W, H) {
+  const s = lado === "izq" ? "Izq" : "Der";
+  const ordenDer = ["dedo1", "dedo2", "dedo3", "dedo4", "dedo5"];
+  const ordenIzq = ["dedo5", "dedo4", "dedo3", "dedo2", "dedo1"];
+  const tabla = lado === "izq" ? ordenIzq : ordenDer;
+  const orden = det.dedos.slice().sort(function (a, b) { return a.x - b.x; });
+  const pieces = [];
+  orden.forEach(function (f, i) {
+    const nombre = tabla[i] || "dedo3";
+    const len = Math.max(4, det.palmTop - f.tip);
+    const cuantas = nombre === "dedo1" ? 2 : 3;
+    for (let k = 1; k <= cuantas; k++) {
+      const frac = k / (cuantas + 1);
+      const cy = Math.round(f.tip + len * frac);
+      const r = Math.max(5, Math.round(H * 0.02));
+      const clave = nombre + "A" + k + s;
+      const titulo = NOMBRES_PARTES[clave] || clave;
+      pieces.push(`<circle class="eval-subpart" data-part="${clave}" cx="${f.x}" cy="${cy}" r="${r}" title="${titulo}"/>`);
+    }
+  });
+  const cyP = Math.round(det.palmTop + (H - det.palmTop) * 0.5);
+  pieces.push(`<ellipse class="eval-subpart" data-part="planta${s}" cx="${Math.round(W * 0.5)}" cy="${cyP}" rx="${Math.round(W * 0.36)}" ry="${Math.round((H - det.palmTop) * 0.34)}" title="${NOMBRES_PARTES["planta" + s] || ""}"/>`);
+  return pieces.join("");
+}
+
+function renderExtremidadFoto(caja, tipo, lado) {
+  const esMano = tipo === "mano";
+  const src = esMano
+    ? (lado === "izq" ? "mano_izquierda.jfif" : "mano_derecha.jfif")
+    : (lado === "izq" ? "pie_izquierdo.jpg" : "pie_derecho.jpg");
+  const alt = (esMano ? "Mano " : "Pie ") + (lado === "izq" ? "izquierdo" : "derecho");
+  caja.innerHTML = `<div class="eval-extrem-foto">
+    <img id="evalExtremImg" class="eval-extrem-img" src="${src}" alt="${alt}" />
+    <svg id="evalExtremHit" class="eval-hitlayer eval-extrem-hit" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"></svg>
+  </div>`;
+  const img = document.getElementById("evalExtremImg");
+  const hit = document.getElementById("evalExtremHit");
+  const dibujar = function () {
+    const W = img.naturalWidth || 400;
+    const H = img.naturalHeight || 400;
+    hit.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const det = detectarDedos(img);
+    if (!det || det.dedos.length < 4) {
+      if (esMano) {
+        hit.innerHTML = construirZonasMano(null, lado, W, H);
+      } else {
+        caja.innerHTML = svgPie(lado);
+        caja.querySelectorAll(".eval-subpart").forEach(el => el.addEventListener("click", () => marcarParte(el.dataset.part)));
+        return;
+      }
+    } else {
+      hit.innerHTML = esMano ? construirZonasMano(det, lado, W, H) : construirZonasPie(det, lado, W, H);
+    }
+    hit.querySelectorAll(".eval-subpart").forEach(el => el.addEventListener("click", () => marcarParte(el.dataset.part)));
+  };
+  if (img.complete && img.naturalWidth) dibujar();
+  else img.onload = dibujar;
+  img.onerror = dibujar;
+}
+
+function svgPie(lado) {
+  const s = lado === "izq" ? "Izq" : "Der";
+  const giro = lado === "der" ? ' transform="translate(220 0) scale(-1 1)"' : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 260" class="eval-extrem-svg-svg"><g${giro}>
+    <circle class="eval-subpart" data-part="dedo1${s}" cx="165" cy="105" r="22"/>
+    <circle class="eval-subpart" data-part="dedo2${s}" cx="126" cy="100" r="22"/>
+    <circle class="eval-subpart" data-part="dedo3${s}" cx="104" cy="100" r="22"/>
+    <circle class="eval-subpart" data-part="dedo4${s}" cx="82" cy="104" r="22"/>
+    <circle class="eval-subpart" data-part="dedo5${s}" cx="62" cy="110" r="20"/>
+    <ellipse class="eval-subpart" data-part="planta${s}" cx="112" cy="180" rx="72" ry="56"/>
+  </g></svg>`;
+}
+
+function keysExtremidad() {
+  if (!extremidadActiva) return { keys: [], main: "" };
+  const s = extremidadActiva.lado === "izq" ? "Izq" : "Der";
+  const base = extremidadActiva.tipo === "mano"
+    ? ["pulgarA1", "pulgarA2", "indiceA1", "indiceA2", "indiceA3", "medioA1", "medioA2", "medioA3", "anularA1", "anularA2", "anularA3", "meniqueA1", "meniqueA2", "meniqueA3", "palma", "radio"]
+    : ["dedo1A1", "dedo1A2", "dedo2A1", "dedo2A2", "dedo2A3", "dedo3A1", "dedo3A2", "dedo3A3", "dedo4A1", "dedo4A2", "dedo4A3", "dedo5A1", "dedo5A2", "dedo5A3", "planta"];
+  return { keys: base.map(k => k + s), main: (extremidadActiva.tipo === "mano" ? "mano" : "pie") + s };
+}
+
+function abrirExtremidad(parte) {
+  const cfg = EXTREM_POR_PARTE[parte];
+  if (!cfg) return;
+  extremidadActiva = cfg;
+  const titulo = document.getElementById("evalExtremTitulo");
+  if (titulo) titulo.textContent = (cfg.tipo === "mano" ? "Mano " : "Pie ") + (cfg.lado === "izq" ? "izquierdo" : "derecho");
+  const caja = document.getElementById("evalExtremSvg");
+  if (caja) {
+    renderExtremidadFoto(caja, cfg.tipo, cfg.lado);
+  }
+  refreshChips();
+  syncBorradorUI();
+  renderExtremPartes();
+  abrirModal("modalEvalExtremidad");
+}
+
+function renderExtremPartes() {
+  const cont = document.getElementById("evalExtremPartes");
+  const contador = document.getElementById("evalExtremContador");
+  if (!cont) return;
+  const { keys } = keysExtremidad();
+  const marcadas = keys.filter(k => lesionesEval[k]);
+  if (contador) contador.textContent = marcadas.length;
+  if (!marcadas.length) {
+    cont.innerHTML = `<p class="empty">Sin marcas en esta extremidad.</p>`;
+    return;
+  }
+  cont.innerHTML = marcadas.map(k => {
+    const l = lesionesEval[k];
+    return `
+      <div class="eval-parte">
+        <span class="lesion-dot" style="background:${l.color};--chip:${l.color}"></span>
+        <span class="eval-parte-nombre">${NOMBRES_PARTES[k] || k} · ${l.label}</span>
+        <button type="button" class="btn-icon danger" data-quitar-sub="${k}" title="Quitar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>`;
+  }).join("");
+  cont.querySelectorAll("[data-quitar-sub]").forEach(b => b.addEventListener("click", () => {
+    delete lesionesEval[b.dataset.quitarSub];
+    colorearPartes();
+    renderExtremPartes();
+    renderPartesAfectadas();
+  }));
+}
+
+function marcarExtremidadCompleta() {
+  if (!extremidadActiva) return;
+  const { keys, main } = keysExtremidad();
+  const t = TIPOS_LESION.find(x => x.id === lesionTipoActual);
+  if (lesionBorrador) {
+    keys.forEach(k => delete lesionesEval[k]);
+    delete lesionesEval[main];
+  } else if (t) {
+    keys.forEach(k => { lesionesEval[k] = { id: t.id, color: t.color, label: t.label }; });
+    lesionesEval[main] = { id: t.id, color: t.color, label: t.label };
+  }
+  colorearPartes();
+  renderExtremPartes();
+  renderPartesAfectadas();
+}
+
+function limpiarExtremidad() {
+  if (!extremidadActiva) return;
+  const { keys, main } = keysExtremidad();
+  keys.forEach(k => delete lesionesEval[k]);
+  delete lesionesEval[main];
+  colorearPartes();
+  renderExtremPartes();
+  renderPartesAfectadas();
+}
+
+function fillEvalPaciente() {
+  const sel = document.getElementById("evalPaciente");
+  if (!sel) return;
+  sel.innerHTML = `<option value="">— Selecciona un paciente —</option>` + State.pacientes
+    .filter(p => !p.eliminado)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    .map(p => `<option value="${p.id}">${p.nombre} (${p.codigo})</option>`)
+    .join("");
+}
+
+function guardarEvaluacion() {
+  const pid = Number(document.getElementById("evalPaciente").value);
+  if (!pid) {
+    alert("Selecciona un paciente para guardar la evaluación física.");
+    return;
+  }
+  const nota = document.getElementById("evalNota").value.trim();
+  const fecha = new Date().toISOString().split("T")[0];
+  State.evaluaciones.push({ id: Date.now(), pacienteId: pid, fecha, sexo: sexoEval, nota, lesiones: JSON.parse(JSON.stringify(lesionesEval)) });
+  saveKey("evaluaciones");
+  renderEvaluacionesGuardadas();
+}
+
+function cargarEvaluacion(id) {
+  const ev = State.evaluaciones.find(e => e.id === id);
+  if (!ev) return;
+  const sel = document.getElementById("evalPaciente");
+  lesionesEval = ev.lesiones && typeof ev.lesiones === "object" ? { ...ev.lesiones } : {};
+  if (sel) sel.value = ev.pacienteId || "";
+  const nota = document.getElementById("evalNota");
+  if (nota) nota.value = ev.nota || "";
+  if (ev.sexo) cambiarSexoEval(ev.sexo);
+  colorearPartes();
+  renderPartesAfectadas();
+}
+
+function renderEvaluacionesGuardadas() {
+  const cont = document.getElementById("evalGuardados");
+  if (!cont) return;
+  const lista = [...State.evaluaciones].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
+  if (!lista.length) {
+    cont.innerHTML = `<p class="empty">Aún no hay evaluaciones guardadas.</p>`;
+    return;
+  }
+  cont.innerHTML = lista.map(ev => {
+    const p = State.pacientes.find(x => x.id === ev.pacienteId);
+    const claves = Object.keys(ev.lesiones || {});
+    const resumen = claves.slice(0, 4).map(k => NOMBRES_PARTES[k] || k).join(", ");
+    return `
+      <div class="eval-parte eval-save">
+        <span class="eval-parte-nombre">
+          <strong>${p ? p.nombre : "Paciente eliminado"}</strong><br>
+          ${fmtFechaES(ev.fecha)} · ${claves.length} zona(s) ${claves.length ? "· " + resumen + (claves.length > 4 ? "…" : "") : ""}
+        </span>
+        <button type="button" class="btn-icon" data-cargar-eval="${ev.id}" title="Cargar en la figura">
+          <span class="material-symbols-outlined">upload</span>
+        </button>
+        <button type="button" class="btn-icon danger" data-borrar-eval="${ev.id}" title="Eliminar evaluación">
+          <span class="material-symbols-outlined">delete</span>
+        </button>
+      </div>`;
+  }).join("");
+  cont.querySelectorAll("[data-cargar-eval]").forEach(b => b.addEventListener("click", () => cargarEvaluacion(Number(b.dataset.cargarEval))));
+  cont.querySelectorAll("[data-borrar-eval]").forEach(b => b.addEventListener("click", () => {
+    if (!confirm("¿Eliminar esta evaluación guardada?")) return;
+    State.evaluaciones = State.evaluaciones.filter(e => e.id !== Number(b.dataset.borrarEval));
+    saveKey("evaluaciones");
+    renderEvaluacionesGuardadas();
+  }));
 }
 
 function imprimirTurnos() {
@@ -1870,7 +2996,7 @@ function renderHome() {
   document.getElementById("statDocumentos").textContent = State.documentos.length;
   document.getElementById("statFacturas").textContent = State.facturas.length;
   document.getElementById("statSinCita").textContent =
-    pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada)).length;
+    pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada && !c.cancelada)).length;
   renderProximasCitas();
   renderDashboardCitas();
 }
@@ -1924,8 +3050,8 @@ function renderDashboardCitas() {
   const sc = document.getElementById("dashPacientesSinCita");
   const scCount = document.getElementById("dashCountSinCita");
   if (sc) {
-    const sinCita = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada)).slice(0, 5);
-    if (scCount) scCount.textContent = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada)).length;
+    const sinCita = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada && !c.cancelada)).slice(0, 5);
+    if (scCount) scCount.textContent = pacientesActivos().filter(p => !State.citas.some(c => c.pacienteId === p.id && !c.completada && !c.cancelada)).length;
     sc.innerHTML = sinCita.length === 0
       ? `<p class="empty">Todos los pacientes tienen al menos una cita.</p>`
       : sinCita.map(p => `
@@ -2030,6 +3156,16 @@ function calcularEstadisticas() {
     periodo.innerHTML = citas.length === 0
       ? `<p class="empty">Sin datos para el gráfico de pastel.</p>`
       : generarDonaSVG(seriePeriodo(desde, hasta, citas), "Citas por período");
+  }
+
+  const lineas = document.getElementById("estLineas");
+  if (lineas) {
+    lineas.innerHTML = (docs.length === 0 && facturas.length === 0)
+      ? `<p class="empty">Sin datos de documentos o facturas en el rango seleccionado.</p>`
+      : generarLineaSVG([
+          { nombre: "Documentos subidos", color: "#3d648a", datos: serieLineal(desde, hasta, docs, d => fechaESaISO(d.fecha)) },
+          { nombre: "Facturas", color: "#c95d3a", datos: serieLineal(desde, hasta, facturas, f => fechaESaISO(f.fecha)) }
+        ], "Documentos subidos y facturas por período");
   }
 }
 
@@ -2144,6 +3280,86 @@ function slicePath(cx, cy, rOut, rIn, a0, a1) {
 
 const PALETA_PIE = ["#c95d3a", "#e07a5a", "#ef8f6d", "#3d648a", "#5c87ad", "#93b4cf", "#7a9a5b", "#b58a5b"];
 
+function serieLineal(desde, hasta, items, getISO) {
+  const d1 = new Date(desde + "T00:00:00");
+  const d2 = new Date(hasta + "T00:00:00");
+  const dias = Math.max(1, Math.round((d2 - d1) / 86400000) + 1);
+  const porMes = dias > 62;
+  const count = {};
+
+  items.forEach(it => {
+    const iso = getISO(it);
+    if (!iso || iso < desde || iso > hasta) return;
+    const clave = porMes ? iso.slice(0, 7) : iso;
+    count[clave] = (count[clave] || 0) + 1;
+  });
+
+  if (porMes) {
+    const cur = new Date(d1.getFullYear(), d1.getMonth(), 1);
+    const end = new Date(d2.getFullYear(), d2.getMonth(), 1);
+    const datos = [];
+    while (cur <= end) {
+      const mk = cur.getFullYear() + "-" + String(cur.getMonth() + 1).padStart(2, "0");
+      datos.push({ label: `${MESES_CORTOS[cur.getMonth()]} ${String(cur.getFullYear()).slice(2)}`, val: count[mk] || 0, mostrar: true });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return datos;
+  }
+
+  const step = dias > 20 ? Math.ceil(dias / 15) : 1;
+  const datos = [];
+  for (let k = 0; k < dias; k++) {
+    const iso = isoLocal(new Date(d1.getTime() + k * 86400000));
+    const dd = parseInt(iso.slice(8, 10), 10);
+    const mm = parseInt(iso.slice(5, 7), 10);
+    datos.push({ label: `${dd}/${mm}`, val: count[iso] || 0, mostrar: k % step === 0 || k === dias - 1 });
+  }
+  return datos;
+}
+
+function generarLineaSVG(series, titulo) {
+  const W = 700, H = 260, padL = 48, padR = 16, padT = 32, padB = 38;
+  const n = series[0].datos.length;
+  const max = Math.max(1, ...series.flatMap(s => s.datos.map(d => d.val)));
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const stepX = n > 1 ? innerW / (n - 1) : 0;
+  const x = i => padL + (n > 1 ? i * stepX : innerW / 2);
+  const y = v => padT + innerH - (v / max) * innerH;
+
+  let grid = "";
+  for (let g = 0; g <= 4; g++) {
+    const v = Math.round(max * g / 4);
+    const gy = padT + innerH * (1 - g / 4);
+    grid += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#e3dcd4" stroke-width="1"/>`;
+    grid += `<text x="${padL - 6}" y="${gy + 4}" text-anchor="end" font-size="10" fill="#888">${v}</text>`;
+  }
+
+  const paths = series.map(s => {
+    const puntos = s.datos.map((d, i) => `${x(i)},${y(d.val)}`).join(" ");
+    const dots = s.datos.map((d, i) =>
+      `<circle cx="${x(i)}" cy="${y(d.val)}" r="3.4" fill="${s.color}"><title>${s.nombre} · ${d.label}: ${d.val}</title></circle>`
+    ).join("");
+    return `<polyline points="${puntos}" fill="none" stroke="${s.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+  }).join("");
+
+  const labels = series[0].datos.map((d, i) => d.mostrar === false
+    ? ""
+    : `<text x="${x(i)}" y="${padT + innerH + 16}" text-anchor="middle" font-size="9.5" fill="#777">${d.label}</text>`
+  ).join("");
+
+  const leyenda = series.map(s =>
+    `<span class="line-legend"><i style="background:${s.color}"></i>${s.nombre}</span>`
+  ).join("");
+
+  return `
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${titulo}">
+      <text x="${padL}" y="${padT - 10}" font-size="12" font-weight="700" fill="#1b2a4a">${titulo}</text>
+      ${grid}${paths}${labels}
+    </svg>
+    <div class="line-leyenda">${leyenda}</div>`;
+}
+
 function serieSemana(citas) {
   const dias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
   const acc = [0, 0, 0, 0, 0, 0, 0];
@@ -2221,7 +3437,19 @@ function imprimirEstadisticas() {
   const citas = State.citas
     .filter(c => c.fecha && c.fecha >= desde && c.fecha <= hasta)
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
-  if (citas.length === 0) {
+  const registros = State.registros.filter(r => {
+    const iso = fechaESaISO(r.fecha);
+    return iso && iso >= desde && iso <= hasta;
+  });
+  const docs = State.documentos.filter(d => {
+    const iso = fechaESaISO(d.fecha);
+    return iso && iso >= desde && iso <= hasta;
+  });
+  const facturas = State.facturas.filter(f => {
+    const iso = fechaESaISO(f.fecha);
+    return iso && iso >= desde && iso <= hasta;
+  });
+  if (citas.length === 0 && docs.length === 0 && facturas.length === 0) {
     alert("No hay datos en el rango seleccionado.");
     return;
   }
@@ -2234,10 +3462,15 @@ function imprimirEstadisticas() {
 
   abrirImpresion(`Estadísticas de pacientes atendidos (${fmtFechaES(desde)} al ${fmtFechaES(hasta)})`,
     `
-    <p class="print-resumen"><strong>Citas atendidas:</strong> ${citas.length} &nbsp;·&nbsp; <strong>Pacientes únicos:</strong> ${pacientesUnicos.size}</p>
+    <p class="print-resumen"><strong>Citas atendidas:</strong> ${citas.length} &nbsp;·&nbsp; <strong>Pacientes únicos:</strong> ${pacientesUnicos.size} &nbsp;·&nbsp; <strong>Registros creados:</strong> ${registros.length} &nbsp;·&nbsp; <strong>Documentos subidos:</strong> ${docs.length} &nbsp;·&nbsp; <strong>Facturas emitidas:</strong> ${facturas.length}</p>
     ${generarDonaSVG(seriePeriodo(desde, hasta, citas), "Citas por período")}
     <p class="print-resumen"><strong>Citas por día de la semana:</strong></p>
     ${generarDonaSVG(serieSemana(citas), "Citas por día de la semana")}
+    <p class="print-resumen"><strong>Documentos subidos y facturas por período:</strong></p>
+    ${generarLineaSVG([
+      { nombre: "Documentos subidos", color: "#3d648a", datos: serieLineal(desde, hasta, docs, d => fechaESaISO(d.fecha)) },
+      { nombre: "Facturas", color: "#c95d3a", datos: serieLineal(desde, hasta, facturas, f => fechaESaISO(f.fecha)) }
+    ], "Documentos subidos y facturas por período")}
     <table>
       <thead><tr><th>Fecha</th><th>Hora</th><th>Turno</th><th>Paciente</th><th>Motivo</th></tr></thead>
       <tbody>${filas}</tbody>
@@ -2253,6 +3486,18 @@ function exportarEstadisticas() {
     .filter(c => c.fecha && c.fecha >= desde && c.fecha <= hasta)
     .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
   const pacientesUnicos = new Set(citas.map(c => c.pacienteId));
+  const registros = State.registros.filter(r => {
+    const iso = fechaESaISO(r.fecha);
+    return iso && iso >= desde && iso <= hasta;
+  });
+  const docs = State.documentos.filter(d => {
+    const iso = fechaESaISO(d.fecha);
+    return iso && iso >= desde && iso <= hasta;
+  });
+  const facturas = State.facturas.filter(f => {
+    const iso = fechaESaISO(f.fecha);
+    return iso && iso >= desde && iso <= hasta;
+  });
 
   const esc = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
   const filas = [
@@ -2260,6 +3505,9 @@ function exportarEstadisticas() {
     `Resumen,Rango,${fmtFechaES(desde)} al ${fmtFechaES(hasta)}`,
     `Resumen,Citas atendidas,${citas.length}`,
     `Resumen,Pacientes unicos,${pacientesUnicos.size}`,
+    `Resumen,Registros creados,${registros.length}`,
+    `Resumen,Documentos subidos,${docs.length}`,
+    `Resumen,Facturas emitidas,${facturas.length}`,
     ``,
     `Fecha,Hora,Turno,Codigo,Paciente,Cedula,Seguro,Motivo`
   ];
@@ -2320,7 +3568,7 @@ function renderCalendario() {
   for (let i = 0; i < offset; i++) celdas += `<div class="cal-vacio"></div>`;
   for (let d = 1; d <= totalDias; d++) {
     const iso = `${anio}-${String(mes + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const n = State.citas.filter(c => c.fecha === iso && !c.completada).length;
+    const n = State.citas.filter(c => c.fecha === iso && !c.completada && !c.cancelada).length;
     const clases = ["cal-dia"];
     if (iso === hoyIso) clases.push("hoy");
     if (iso === calendarioDia) clases.push("sel");
@@ -2353,7 +3601,7 @@ function renderCalDetalle() {
     return;
   }
   const citas = State.citas
-    .filter(c => c.fecha === calendarioDia && !c.completada)
+    .filter(c => c.fecha === calendarioDia && !c.completada && !c.cancelada)
     .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
   if (citas.length === 0) {
     cont.innerHTML = `<p class="empty">Sin citas el ${fmtFechaES(calendarioDia)}.</p>`;
@@ -2621,21 +3869,28 @@ function renderFacturas() {
 
   lista.innerHTML = [...State.facturas].reverse().map(f => {
     const p = State.pacientes.find(x => x.id === f.pacienteId);
+    const items = f.items || [];
     return `
       <div class="list-item">
         <div class="item-main">
           <strong>${f.codigo}</strong>
-          <span class="tag">${f.fecha}</span>
+          <span class="tag">${fmtFechaES(f.fecha)}</span>
           <span class="tag tag-price">${fmtMoney(f.total)}</span>
         </div>
         <div class="item-sub">${p ? p.nombre : "Paciente eliminado"} · Dr(a). ${f.doctor}</div>
         <div class="item-sub">Honorarios: ${fmtMoney(f.honorarios)} (${f.porcentaje}%) · Neto clínica: ${fmtMoney(f.neto)}</div>
         <div class="item-sub detalles-factura" id="detFactura-${f.id}" hidden>
-          ${f.items.map(it => `<span>· ${it.nombre}: ${fmtMoney(it.precio)}</span>`).join("<br>")}
+          ${items.length ? items.map(it => `<span>· ${it.nombre}: ${fmtMoney(it.precio)}</span>`).join("<br>") : `<span>Sin procedimientos guardados</span>`}
         </div>
         <div class="item-actions">
           <button class="btn-icon" data-det-factura="${f.id}" title="Ver detalle">
             <span class="material-symbols-outlined">expand_more</span>
+          </button>
+          <button class="btn-icon" data-editar-factura="${f.id}" title="Editar factura">
+            <span class="material-symbols-outlined">edit</span>
+          </button>
+          <button class="btn-icon" data-imprimir-factura="${f.id}" title="Imprimir factura">
+            <span class="material-symbols-outlined">print</span>
           </button>
           ${pacienteEliminadoDe(f.pacienteId) ? "" : `<button class="btn-icon danger" data-borrar-factura="${f.id}" title="Eliminar factura">
             <span class="material-symbols-outlined">delete</span>
@@ -2651,6 +3906,12 @@ function renderFacturas() {
       if (det) det.hidden = !det.hidden;
     })
   );
+  lista.querySelectorAll("[data-editar-factura]").forEach(b =>
+    b.addEventListener("click", () => abrirModalEditarFactura(Number(b.dataset.editarFactura)))
+  );
+  lista.querySelectorAll("[data-imprimir-factura]").forEach(b =>
+    b.addEventListener("click", () => imprimirFactura(Number(b.dataset.imprimirFactura)))
+  );
   lista.querySelectorAll("[data-borrar-factura]").forEach(b =>
     b.addEventListener("click", () => {
       if (!confirm("¿Eliminar esta factura?")) return;
@@ -2660,6 +3921,130 @@ function renderFacturas() {
       renderHome();
     })
   );
+}
+
+let editarFacturaId = null;
+let editarFacturaTmp = null;
+
+function abrirModalEditarFactura(id) {
+  const f = State.facturas.find(x => x.id === id);
+  if (!f) return;
+  editarFacturaId = id;
+  editarFacturaTmp = { ...f, items: (f.items || []).map(it => ({ ...it })) };
+  const p = State.pacientes.find(x => x.id === f.pacienteId);
+  const nom = document.getElementById("edFactPaciente");
+  if (nom) nom.value = p ? `${p.nombre} (${p.codigo})` : "Paciente eliminado";
+  document.getElementById("edFactPorcentaje").value = f.porcentaje != null ? f.porcentaje : 0;
+  renderEditarFacturaItems();
+  abrirModal("modalEditarFactura");
+}
+
+function renderEditarFacturaItems() {
+  const cont = document.getElementById("edFactItems");
+  if (!cont || !editarFacturaTmp) return;
+  const items = (editarFacturaTmp.items && editarFacturaTmp.items.length)
+    ? editarFacturaTmp.items
+    : [{ nombre: "", precio: "" }];
+  cont.innerHTML = items.map((it, i) => `
+    <div class="list-item item-compact">
+      <div class="item-main ed-fact-fill">
+        <input type="text" class="edFactNombre" value="${String(it.nombre || "").replace(/"/g, "&quot;")}" placeholder="Procedimiento" />
+      </div>
+      <div class="item-main ed-fact-price">
+        <input type="number" class="edFactPrecio" value="${it.precio != null ? it.precio : ""}" min="0" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="item-actions">
+        <button class="btn-icon danger" data-quitar-edit="${i}" title="Quitar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+  `).join("") + `
+    <button type="button" class="btn btn--ghost-dark btn-small" id="btnEdFactAgregar">
+      <span class="material-symbols-outlined">add</span> Agregar procedimiento
+    </button>`;
+
+  cont.querySelectorAll("[data-quitar-edit]").forEach(b =>
+    b.addEventListener("click", () => {
+      const it = editarFacturaTmp.items || (editarFacturaTmp.items = []);
+      it.splice(Number(b.dataset.quitarEdit), 1);
+      renderEditarFacturaItems();
+    })
+  );
+  const btnAdd = document.getElementById("btnEdFactAgregar");
+  if (btnAdd) btnAdd.addEventListener("click", () => {
+    (editarFacturaTmp.items || (editarFacturaTmp.items = [])).push({ nombre: "", precio: "" });
+    renderEditarFacturaItems();
+  });
+  cont.querySelectorAll(".edFactNombre, .edFactPrecio").forEach(el =>
+    el.addEventListener("input", updateEditarFacturaResumen)
+  );
+  updateEditarFacturaResumen();
+}
+
+function updateEditarFacturaResumen() {
+  if (!editarFacturaTmp) return;
+  const nomes = Array.from(document.querySelectorAll(".edFactNombre"));
+  const precios = Array.from(document.querySelectorAll(".edFactPrecio"));
+  const items = nomes.map((n, i) => ({
+    nombre: n.value.trim(),
+    precio: parseFloat(precios[i].value) || 0
+  })).filter(it => it.nombre);
+  const sub = items.reduce((a, it) => a + it.precio, 0);
+  const pct = parseFloat(document.getElementById("edFactPorcentaje").value) || 0;
+  document.getElementById("edResumenSubtotal").textContent = fmtMoney(sub);
+  document.getElementById("edResumenHonorarios").textContent = fmtMoney(sub * pct / 100);
+  document.getElementById("edResumenNeto").textContent = fmtMoney(sub - (sub * pct / 100));
+  document.getElementById("edResumenTotal").textContent = fmtMoney(sub);
+}
+
+function guardarFacturaEditada() {
+  const f = State.facturas.find(x => x.id === editarFacturaId);
+  if (!f || !editarFacturaTmp) return;
+  updateEditarFacturaResumen();
+  const items = (editarFacturaTmp.items || []).filter(it => it.nombre && it.precio > 0);
+  if (items.length === 0) {
+    alert("Agrega al menos un procedimiento válido con su precio.");
+    return;
+  }
+  const sub = items.reduce((a, it) => a + it.precio, 0);
+  const pct = parseFloat(document.getElementById("edFactPorcentaje").value) || 0;
+  f.items = items;
+  f.subtotal = sub;
+  f.porcentaje = pct;
+  f.honorarios = sub * pct / 100;
+  f.neto = sub - f.honorarios;
+  f.total = sub;
+  saveKey("facturas");
+  editarFacturaId = null;
+  editarFacturaTmp = null;
+  cerrarModales();
+  renderFacturas();
+  renderHome();
+}
+
+function imprimirFactura(id) {
+  const f = State.facturas.find(x => x.id === id);
+  if (!f) return;
+  const p = State.pacientes.find(x => x.id === f.pacienteId);
+  const items = f.items || [];
+  const filas = items.map((it, i) =>
+    `<tr><td>${i + 1}</td><td>${it.nombre}</td><td>${fmtMoney(it.precio)}</td></tr>`
+  ).join("");
+  abrirImpresion("Factura — " + f.codigo, `
+    <div class="print-resumen"><strong>Paciente:</strong> ${p ? p.nombre : "Paciente eliminado"}${p && p.codigo ? ` (${p.codigo})` : ""}</div>
+    <div class="print-resumen"><strong>Fecha:</strong> ${fmtFechaES(f.fecha)} · <strong>Doctor:</strong> Dr(a). ${f.doctor}</div>
+    <table>
+      <thead><tr><th>#</th><th>Procedimiento</th><th>Precio</th></tr></thead>
+      <tbody>${filas || `<tr><td colspan="3">Sin procedimientos guardados</td></tr>`}</tbody>
+      <tfoot>
+        <tr><td colspan="2">Subtotal</td><td>${fmtMoney(f.subtotal)}</td></tr>
+        <tr><td colspan="2">Honorarios del doctor (${f.porcentaje || 0}%)</td><td>${fmtMoney(f.honorarios)}</td></tr>
+        <tr><td colspan="2">Neto clínica</td><td>${fmtMoney(f.neto)}</td></tr>
+        <tr><td colspan="2"><strong>Total a pagar</strong></td><td><strong>${fmtMoney(f.total)}</strong></td></tr>
+      </tfoot>
+    </table>
+  `);
 }
 
 function agregarFilaMed() {
@@ -3075,28 +4460,6 @@ function initApp() {
       saveKey("pacientes");
       mostrarNotificacion(`Paciente <b>${paciente.nombre}</b> agregado correctamente`);
 
-      const proxFecha = document.getElementById("pacienteProxCitaFecha").value;
-      const proxHora = document.getElementById("pacienteProxCitaHora").value;
-      const proxAmPm = document.getElementById("pacienteProxCitaAmPm") ? document.getElementById("pacienteProxCitaAmPm").value : "PM";
-      if (proxFecha) {
-        const error = validarLimiteCitas(proxFecha);
-        if (error) {
-          alert("El paciente se guardó, pero no se pudo agendar su próxima cita: " + error);
-        } else {
-          State.citas.push({
-            id: Date.now() + 1,
-            pacienteId: paciente.id,
-            fecha: proxFecha,
-            hora: proxHora || "09:00",
-            amPm: proxAmPm,
-            motivo: "Próxima cita",
-            turno: genTurno(proxFecha)
-          });
-          saveKey("citas");
-          renderCitas();
-        }
-      }
-
       pacienteForm.reset();
       document.getElementById("pacienteCodigo").value = genCodigoPaciente();
       renderPacientes();
@@ -3262,30 +4625,55 @@ function initApp() {
   if (registroForm) {
     registroForm.addEventListener("submit", (e) => {
       e.preventDefault();
+      const prox = {
+        fecha: document.getElementById("registroProxCitaFecha").value,
+        hora: document.getElementById("registroProxCitaHora").value,
+        amPm: document.getElementById("registroProxCitaAmPm").value
+      };
       const registro = {
         id: Date.now(),
         pacienteId: Number(document.getElementById("registroPaciente").value),
         titulo: document.getElementById("registroTitulo").value.trim(),
+        tipo: document.getElementById("registroTipo").value,
         detalle: document.getElementById("registroDetalle").value.trim(),
         fecha: new Date().toLocaleDateString("es-ES")
       };
+      if (prox.fecha) registro.proximaCita = { fecha: prox.fecha, hora: prox.hora || "", amPm: prox.amPm };
       const file = document.getElementById("registroArchivo").files[0];
       if (file) {
         const reader = new FileReader();
         reader.onload = () => {
           registro.archivo = { name: file.name, type: file.type, size: file.size, dataUrl: reader.result };
-          pushRegistro(registro, registroForm);
+          pushRegistro(registro, registroForm, prox);
         };
         reader.readAsDataURL(file);
       } else {
-        pushRegistro(registro, registroForm);
+        pushRegistro(registro, registroForm, prox);
       }
     });
   }
 
-  function pushRegistro(registro, form) {
+  function pushRegistro(registro, form, prox) {
     State.registros.push(registro);
     saveKey("registros");
+    if (prox && prox.fecha) {
+      const error = validarLimiteCitas(prox.fecha);
+      if (error) {
+        alert("El historial se guardó, pero no se pudo agendar la próxima cita: " + error);
+      } else {
+        State.citas.push({
+          id: Date.now() + 1,
+          pacienteId: registro.pacienteId,
+          fecha: prox.fecha,
+          hora: prox.hora || "09:00",
+          amPm: prox.amPm,
+          motivo: "Próxima cita",
+          turno: genTurno(prox.fecha)
+        });
+        saveKey("citas");
+        renderCitas();
+      }
+    }
     mostrarNotificacion(`Registro <b>${registro.titulo}</b> agregado correctamente`);
     if (form) form.reset();
     renderRegistros();
@@ -3456,6 +4844,17 @@ function initApp() {
   const btnCalendario = document.getElementById("btnCalendario");
   if (btnCalendario) btnCalendario.addEventListener("click", abrirCalendario);
 
+  const btnMostrarElim = document.getElementById("btnMostrarEliminados");
+  if (btnMostrarElim) btnMostrarElim.addEventListener("click", toggleMostrarEliminados);
+
+  const edFactPorcentaje = document.getElementById("edFactPorcentaje");
+  if (edFactPorcentaje) edFactPorcentaje.addEventListener("input", updateEditarFacturaResumen);
+  const edFactForm = document.querySelector('#modalEditarFactura form');
+  if (edFactForm) edFactForm.addEventListener("submit", e => {
+    e.preventDefault();
+    guardarFacturaEditada();
+  });
+
   const calPrev = document.getElementById("calPrev");
   const calNext = document.getElementById("calNext");
   if (calPrev) calPrev.addEventListener("click", () => cambiarMes(-1));
@@ -3483,6 +4882,9 @@ function initApp() {
   const btnGuardarConfig = document.getElementById("btnGuardarConfig");
   if (btnGuardarConfig) btnGuardarConfig.addEventListener("click", guardarConfig);
 
+  const cfgColorSel = document.getElementById("cfgColorBotones");
+  if (cfgColorSel) cfgColorSel.addEventListener("change", () => aplicarColorBotones(cfgColorSel.value));
+
   fillSelects();
   renderPacientes();
   renderPacientesSinCita();
@@ -3494,20 +4896,19 @@ function initApp() {
   renderFacturas();
   renderFacturaItems();
   renderRecetas();
+  initEvaluacionFisica();
   updateCitaLimiteInfo();
-  renderPacientesEliminados();
   renderHome();
 }
 
 document.addEventListener("submit", (e) => {
   if (e.target.contains(document.getElementById("confPassword"))) {
     e.preventDefault();
-    confirmarEliminacionDefinitiva();
+    confirmarAccionPaciente();
   }
 });
 
 function mostrarSeccion(sec) {
-  if (sec === "pacientes-eliminados" && !esAdmin()) sec = "inicio";
   document.querySelectorAll(".seccion").forEach(s => s.classList.remove("active"));
   const target = document.getElementById("seccion-" + sec);
   if (target) target.classList.add("active");
@@ -3601,7 +5002,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const navContainer = document.getElementById("nav-container");
 
   if (navContainer) {
-    const cachedNav = sessionStorage.getItem("navHTML_v10");
+    const cachedNav = sessionStorage.getItem("navHTML_v13");
     if (cachedNav) {
       navContainer.innerHTML = cachedNav;
       initApp();
@@ -3612,7 +5013,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           return response.text();
         })
         .then(data => {
-          sessionStorage.setItem("navHTML_v10", data);
+          sessionStorage.setItem("navHTML_v13", data);
           navContainer.innerHTML = data;
           initApp();
         })

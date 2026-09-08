@@ -18,13 +18,13 @@ const CATALOGO = {
   },
   citas: {
     tabla: "citas",
-    campos: ["id", "pacienteId", "fecha", "hora", "amPm", "motivo", "turno", "completada", "diagnostico", "tratamiento", "fechaCompletada"],
+    campos: ["id", "pacienteId", "fecha", "hora", "amPm", "motivo", "turno", "completada", "diagnostico", "tratamiento", "fechaCompletada", "cancelada", "fechaCancelacion"],
     json: []
   },
   registros: {
     tabla: "registros",
-    campos: ["id", "pacienteId", "titulo", "detalle", "fecha"],
-    json: ["archivo"]
+    campos: ["id", "pacienteId", "titulo", "detalle", "fecha", "tipo", "archivo", "proximaCita"],
+    json: ["archivo", "proximaCita"]
   },
   documentos: {
     tabla: "documentos",
@@ -33,7 +33,7 @@ const CATALOGO = {
   },
   facturas: {
     tabla: "facturas",
-    campos: ["id", "codigo", "pacienteId", "subtotal", "porcentaje", "honorarios", "neto", "total", "doctor", "fecha"],
+    campos: ["id", "codigo", "pacienteId", "subtotal", "porcentaje", "honorarios", "neto", "total", "doctor", "fecha", "items"],
     json: ["items"]
   },
   citasSinConsulta: {
@@ -43,12 +43,17 @@ const CATALOGO = {
   },
   recetas: {
     tabla: "recetas",
-    campos: ["id", "codigo", "pacienteId", "fecha", "edad", "doctor"],
-    json: ["medicamentos"]
+    campos: ["id", "codigo", "pacienteId", "fecha", "edad", "doctor", "medicamentos", "indicaciones"],
+    json: ["medicamentos", "indicaciones"]
+  },
+  evaluaciones: {
+    tabla: "evaluaciones",
+    campos: ["id", "pacienteId", "fecha", "sexo", "nota", "lesiones"],
+    json: ["lesiones"]
   }
 };
 
-const BOOLEANOS = ["eliminado", "completada"];
+const BOOLEANOS = ["eliminado", "completada", "cancelada"];
 
 function abrir() {
   return new Promise((resolve, reject) => {
@@ -81,6 +86,14 @@ async function inicializar(db) {
       .map(c => (c === "id" ? '"id" INTEGER PRIMARY KEY' : '"' + c + '" TEXT'))
       .join(", ");
     await ejecutar(db, `CREATE TABLE IF NOT EXISTS "${modelo.tabla}" (${columnas})`);
+  }
+  for (const modelo of Object.values(CATALOGO)) {
+    const existentes = new Set((await consultar(db, `PRAGMA table_info("${modelo.tabla}")`)).map(c => c.name));
+    for (const campo of modelo.campos) {
+      if (!existentes.has(campo)) {
+        await ejecutar(db, `ALTER TABLE "${modelo.tabla}" ADD COLUMN "${campo}" TEXT`);
+      }
+    }
   }
   await ejecutar(db, "CREATE TABLE IF NOT EXISTS config (clave TEXT PRIMARY KEY, valor TEXT)");
 }
